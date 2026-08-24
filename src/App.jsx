@@ -25,6 +25,10 @@ import ReceiveHistory from './pages/operations/ReceiveHistory';
 import ReceiveStockForm from './pages/operations/ReceiveStockForm';
 import ReceiveDetails from './pages/operations/ReceiveDetails';
 
+import TransferHistory from './pages/operations/TransferHistory';
+import CreateTransferForm from './pages/operations/CreateTransferForm';
+import TransferDetails from './pages/operations/TransferDetails';
+
 function App() {
   return (
     <BrowserRouter>
@@ -58,7 +62,10 @@ function App() {
                     <Route path="/stock-receiving/new" element={<ReceiveStockForm />} />
                     <Route path="/stock-receiving/:id" element={<ReceiveDetails />} />
                     
-                    <Route path="/stock-transfers" element={<PlaceholderPage />} />
+                    <Route path="/stock-transfers" element={<TransferHistory />} />
+                    <Route path="/stock-transfers/new" element={<CreateTransferForm />} />
+                    <Route path="/stock-transfers/:id" element={<TransferDetails />} />
+                    
                     <Route path="/adjustments" element={<PlaceholderPage />} />
 
                     {/* Sales */}

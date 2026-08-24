@@ -12,4 +12,4 @@ initializeApp();
 // Export function groups (stubs for now)
 // exports.stock = require('./src/stock');
 // exports.billing = require('./src/billing');
-// exports.notifications = require('./src/notifications');
+exports.notifications = require('./src/notifications');

@@ -4,6 +4,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { Menu, Bell, Search, User, LogOut } from 'lucide-react';
 import { logout } from '../../services/authService';
 import { USER_ROLE_LABELS } from '../../config/constants';
+import NotificationBell from './NotificationBell';
 
 /**
  * Top header bar — sticky, contains hamburger menu, search, and user actions.
@@ -67,14 +68,7 @@ export function TopHeader() {
           </button>
 
           {/* Notifications */}
-          <button
-            className="relative p-2 rounded-lg text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors cursor-pointer"
-            aria-label="Notifications"
-          >
-            <Bell className="w-5 h-5" />
-            {/* Notification dot */}
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white" />
-          </button>
+          <NotificationBell />
 
           {/* User Profile display */}
           <div className="flex items-center gap-2 p-1.5 ml-2 border-l border-surface-200 pl-4">

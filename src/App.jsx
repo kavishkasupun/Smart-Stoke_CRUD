@@ -29,6 +29,16 @@ import TransferHistory from './pages/operations/TransferHistory';
 import CreateTransferForm from './pages/operations/CreateTransferForm';
 import TransferDetails from './pages/operations/TransferDetails';
 
+import AdjustmentHistory from './pages/operations/AdjustmentHistory';
+import CreateAdjustmentForm from './pages/operations/CreateAdjustmentForm';
+import AdjustmentDetails from './pages/operations/AdjustmentDetails';
+
+import NotificationCenter from './pages/notifications/NotificationCenter';
+
+import Customers from './pages/customers/Customers';
+import CustomerForm from './pages/customers/CustomerForm';
+import CustomerDetails from './pages/customers/CustomerDetails';
+
 function App() {
   return (
     <BrowserRouter>
@@ -66,12 +76,22 @@ function App() {
                     <Route path="/stock-transfers/new" element={<CreateTransferForm />} />
                     <Route path="/stock-transfers/:id" element={<TransferDetails />} />
                     
-                    <Route path="/adjustments" element={<PlaceholderPage />} />
+                    <Route path="/adjustments" element={<AdjustmentHistory />} />
+                    <Route path="/adjustments/new" element={<CreateAdjustmentForm />} />
+                    <Route path="/adjustments/:id" element={<AdjustmentDetails />} />
 
                     {/* Sales */}
                     <Route path="/bills" element={<PlaceholderPage />} />
-                    <Route path="/sales-returns" element={<PlaceholderPage />} />
-                    <Route path="/customers" element={<PlaceholderPage />} />
+                    <Route path="/bills/new" element={<PlaceholderPage />} />
+                    
+                    {/* Notifications */}
+                    <Route path="/notifications" element={<NotificationCenter />} />
+
+                    {/* People */}
+                    <Route path="/customers" element={<Customers />} />
+                    <Route path="/customers/new" element={<CustomerForm />} />
+                    <Route path="/customers/:id" element={<CustomerDetails />} />
+                    <Route path="/customers/:id/edit" element={<CustomerForm />} />
 
                     {/* Reports */}
                     <Route path="/reports/sales" element={<PlaceholderPage />} />

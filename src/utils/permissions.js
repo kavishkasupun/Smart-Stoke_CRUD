@@ -60,6 +60,26 @@ export function canReceiveStock(role, userBranch, targetBranch) {
 }
 
 /**
+ * Check if user can adjust stock
+ * @param {string} role 
+ * @param {string} userBranch 
+ * @param {string} targetBranch 
+ */
+export function canAdjustStock(role, userBranch, targetBranch) {
+  if (role === USER_ROLES.SUPER_ADMIN || role === USER_ROLES.INVENTORY_MANAGER) return true;
+  
+  if (role === USER_ROLES.MABOLA_MANAGER) {
+    return targetBranch === 'mabola';
+  }
+  
+  if (role === USER_ROLES.JAFFNA_MANAGER) {
+    return targetBranch === 'jaffna';
+  }
+
+  return false; // Sales users cannot adjust stock
+}
+
+/**
  * Check if user can create bills
  * @param {string} role 
  */

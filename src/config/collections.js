@@ -13,5 +13,6 @@ export const COLLECTIONS = {
   STOCK_TRANSFERS: 'stock_transfers',
   STOCK_ADJUSTMENTS: 'stock_adjustments',
   STOCK_RECEIVES: 'stock_receives',
-  AUDIT_LOGS: 'audit_logs'
+  AUDIT_LOGS: 'audit_logs',
+  CUSTOMERS: 'customers'
 };

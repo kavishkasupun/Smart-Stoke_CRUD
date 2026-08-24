@@ -13,12 +13,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 // In a real production setup, you would use a bundler (like Workbox or a custom Vite script)
 // to inject these values into the service worker during the build process.
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAjtVJPnstnEltj-FMnQ4Vr5QFpBKej81Q",
+  authDomain: "smartstokecrud.firebaseapp.com",
+  projectId: "smartstokecrud",
+  storageBucket: "smartstokecrud.firebasestorage.app",
+  messagingSenderId: "1000598195771",
+  appId: "1:872583856275:web:f3ff39a8c783e74cbfbe9e"
 };
 
 // Initialize Firebase

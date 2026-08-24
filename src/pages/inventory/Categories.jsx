@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Check, X } from 'lucide-react';
+import { Plus, Search, Edit2, Check, X, Trash2 } from 'lucide-react';
 import { Card, Table, Button, Input, Modal, Badge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { canManageInventory } from '../../utils/permissions';
-import { getCategories, addCategory, updateCategory } from '../../services/categoryService';
+import { getCategories, addCategory, updateCategory, deleteCategory } from '../../services/categoryService';
 import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 export default function Categories() {
   const { userProfile } = useAuth();
   const canManage = canManageInventory(userProfile?.role);
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +97,25 @@ export default function Categories() {
     }
   };
 
+  const handleDelete = async (id) => {
+    const isConfirmed = await confirm({
+      title: 'Delete Category',
+      message: 'Are you sure you want to delete this category? This action cannot be undone.',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    
+    if (isConfirmed) {
+      try {
+        await deleteCategory(id);
+        toast.success('Category deleted successfully!');
+        fetchCategories();
+      } catch (err) {
+        toast.error('Failed to delete category.');
+      }
+    }
+  };
+
   const columns = [
     { 
       header: 'Name', 
@@ -114,15 +135,26 @@ export default function Categories() {
     ...(canManage ? [{
       header: 'Actions',
       accessor: 'id',
-      render: (_, row) => (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => handleOpenModal(row)}
-          icon={<Edit2 className="w-4 h-4" />}
-        >
-          Edit
-        </Button>
+      render: (id, row) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => handleOpenModal(row)}
+            icon={<Edit2 className="w-4 h-4" />}
+          >
+            Edit
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
+            onClick={() => handleDelete(id)}
+            icon={<Trash2 className="w-4 h-4" />}
+          >
+            Delete
+          </Button>
+        </div>
       )
     }] : [])
   ];

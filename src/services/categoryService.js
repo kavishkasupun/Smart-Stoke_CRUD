@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, withUpdateData } from './dbHelpers';
@@ -60,6 +60,21 @@ export const updateCategory = async (id, data, userId) => {
     return { id, ...payload };
   } catch (error) {
     console.error(`[CategoryService] Error updating category ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a category
+ * @param {string} id 
+ */
+export const deleteCategory = async (id) => {
+  try {
+    const categoryRef = doc(db, COLLECTIONS.CATEGORIES, id);
+    await deleteDoc(categoryRef);
+    return id;
+  } catch (error) {
+    console.error(`[CategoryService] Error deleting category ${id}:`, error);
     throw error;
   }
 };

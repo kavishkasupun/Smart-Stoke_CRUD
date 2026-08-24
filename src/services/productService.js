@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, withUpdateData } from './dbHelpers';
@@ -73,14 +73,25 @@ export const updateProduct = async (id, data, userId) => {
   }
 };
 
+export const deleteProduct = async (id) => {
+  try {
+    const productRef = doc(db, COLLECTIONS.PRODUCTS, id);
+    await deleteDoc(productRef);
+    return id;
+  } catch (error) {
+    console.error(`[ProductService] Error deleting product ${id}:`, error);
+    throw error;
+  }
+};
+
 // ==========================================
 // PRODUCT VARIANTS
 // ==========================================
 
-export const getProductVariants = async (productId) => {
+export const getProductVariants = async (productId = null) => {
   try {
     const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
-    const q = query(variantsRef, where('productId', '==', productId));
+    const q = productId ? query(variantsRef, where('productId', '==', productId)) : variantsRef;
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
@@ -137,6 +148,17 @@ export const updateVariant = async (variantId, data, userId) => {
     return { id: variantId, ...payload };
   } catch (error) {
     console.error(`[ProductService] Error updating variant ${variantId}:`, error);
+    throw error;
+  }
+};
+
+export const deleteVariant = async (id) => {
+  try {
+    const variantRef = doc(db, COLLECTIONS.PRODUCT_VARIANTS, id);
+    await deleteDoc(variantRef);
+    return id;
+  } catch (error) {
+    console.error(`[ProductService] Error deleting variant ${id}:`, error);
     throw error;
   }
 };

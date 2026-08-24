@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Edit2, Plus, Box } from 'lucide-react';
+import { ArrowLeft, Edit2, Plus, Box, Trash2 } from 'lucide-react';
 import { Card, Button, Table, Badge, Modal, Input } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { canManageInventory } from '../../utils/permissions';
-import { getProductById, getProductVariants, addVariant, updateVariant } from '../../services/productService';
+import { getProductById, getProductVariants, addVariant, updateVariant, deleteVariant } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
 import { formatCurrency } from '../../utils/formatters';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userProfile } = useAuth();
   const canManage = canManageInventory(userProfile?.role);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [product, setProduct] = useState(null);
   const [categoryName, setCategoryName] = useState('');
@@ -102,6 +106,7 @@ export default function ProductDetails() {
     e.preventDefault();
     if (!formData.name.trim()) {
       setError('Variant name is required');
+      toast.error('Variant name is required');
       return;
     }
 
@@ -119,8 +124,10 @@ export default function ProductDetails() {
 
       if (editingVariant) {
         await updateVariant(editingVariant.id, payload, userProfile.id);
+        toast.success('Variant updated successfully!');
       } else {
         await addVariant(id, payload, userProfile.id);
+        toast.success('Variant added successfully!');
       }
 
       await fetchProductDetails();
@@ -128,8 +135,28 @@ export default function ProductDetails() {
     } catch (err) {
       console.error(err);
       setError('Failed to save variant');
+      toast.error('Failed to save variant. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteVariant = async (variantId) => {
+    const isConfirmed = await confirm({
+      title: 'Delete Variant',
+      message: 'Are you sure you want to delete this variant? This action cannot be undone.',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
+      try {
+        await deleteVariant(variantId);
+        toast.success('Variant deleted successfully!');
+        fetchProductDetails();
+      } catch (err) {
+        toast.error('Failed to delete variant.');
+      }
     }
   };
 
@@ -205,14 +232,25 @@ export default function ProductDetails() {
       header: 'Actions',
       accessor: 'id',
       render: (_, row) => (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => handleOpenModal(row)}
-          icon={<Edit2 className="w-4 h-4" />}
-        >
-          Edit
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => handleOpenModal(row)}
+            icon={<Edit2 className="w-4 h-4" />}
+          >
+            Edit
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
+            onClick={() => handleDeleteVariant(row.id)}
+            icon={<Trash2 className="w-4 h-4" />}
+          >
+            Delete
+          </Button>
+        </div>
       )
     }] : [])
   ];

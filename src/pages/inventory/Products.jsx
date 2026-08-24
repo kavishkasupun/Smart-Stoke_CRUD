@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye, Filter } from 'lucide-react';
+import { Plus, Search, Eye, Filter, Trash2, Edit2 } from 'lucide-react';
 import { Card, Table, Button, Input, Badge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { canManageInventory } from '../../utils/permissions';
-import { getProducts } from '../../services/productService';
+import { getProducts, deleteProduct } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 export default function Products() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
   const canManage = canManageInventory(userProfile?.role);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -53,6 +57,25 @@ export default function Products() {
     return matchesSearch && matchesCategory;
   });
 
+  const handleDelete = async (id) => {
+    const isConfirmed = await confirm({
+      title: 'Delete Product',
+      message: 'Are you sure you want to delete this product? This action cannot be undone.',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
+      try {
+        await deleteProduct(id);
+        toast.success('Product deleted successfully!');
+        fetchData();
+      } catch (err) {
+        toast.error('Failed to delete product.');
+      }
+    }
+  };
+
   const columns = [
     { 
       header: 'Product Name', 
@@ -86,14 +109,27 @@ export default function Products() {
       header: 'Actions',
       accessor: 'id',
       render: (id) => (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => navigate(`/products/${id}`)}
-          icon={<Eye className="w-4 h-4" />}
-        >
-          View Details
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => navigate(`/products/${id}`)}
+            icon={<Eye className="w-4 h-4" />}
+          >
+            View
+          </Button>
+          {canManage && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
+              onClick={() => handleDelete(id)}
+              icon={<Trash2 className="w-4 h-4" />}
+            >
+              Delete
+            </Button>
+          )}
+        </div>
       )
     }
   ];

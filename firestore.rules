@@ -2,8 +2,192 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(allowedRoles) {
+      return isAuthenticated() && (getUserData().role in allowedRoles);
+    }
+
+    function isSuperAdmin() {
+      return hasRole(['SUPER_ADMIN']);
+    }
+    
+    function isInventoryManager() {
+      return hasRole(['INVENTORY_MANAGER', 'SUPER_ADMIN']);
+    }
+
+    function isSalesUser() {
+      return hasRole(['SALES_USER', 'MABOLA_MANAGER', 'JAFFNA_MANAGER', 'INVENTORY_MANAGER', 'SUPER_ADMIN']);
+    }
+    
+    function isBranchManager() {
+      return hasRole(['MABOLA_MANAGER', 'JAFFNA_MANAGER']);
+    }
+
+    function getBranchId() {
+      return getUserData().branchId;
+    }
+
+    // Prevent reading data from other branches if you are a branch manager
+    function canAccessBranch(docBranch) {
+      let uBranch = getBranchId();
+      return uBranch == 'all' || (docBranch != null && uBranch == docBranch.lower());
+    }
+
+    // Verify the document being created belongs to the user's branch
+    function isCreatingForOwnBranch() {
+      let uBranch = getBranchId();
+      return uBranch == 'all' || (request.resource.data.branch != null && uBranch == request.resource.data.branch.lower());
+    }
+
+    function isSelf(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Verify that a specific field is not modified during an update
+    function notModified(field) {
+      return !(field in request.resource.data) || request.resource.data[field] == resource.data[field];
+    }
+    
+    // =========================================================================
+    // COLLECTIONS
+    // =========================================================================
+
+    // Users Collection
+    match /users/{userId} {
+      // Anyone logged in can read (needed for lookups)
+      allow read: if isAuthenticated();
+      // Only Super Admin can create/delete
+      allow create, delete: if isSuperAdmin();
+      // Super Admin can update anything. User can update their own profile EXCEPT role, branch, and active status
+      allow update: if isSuperAdmin() || (
+        isSelf(userId) 
+        && notModified('role') 
+        && notModified('branchId') 
+        && notModified('active')
+      );
+    }
+
+    // Branches
+    match /branches/{branchId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // Categories
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isInventoryManager();
+    }
+
+    // Products
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isInventoryManager();
+    }
+
+    // Product Variants
+    match /product_variants/{variantId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isInventoryManager();
+      // Sales users can update stock counts during a sale, but cannot modify product details
+      allow update: if isInventoryManager() || (
+        isSalesUser() 
+        && notModified('name') 
+        && notModified('sku') 
+        && notModified('productId') 
+        && notModified('reorderLevel')
+        && notModified('size')
+        && notModified('categoryId')
+      );
+    }
+
+    // Audit Logs (Strictly Append-Only)
+    match /audit_logs/{logId} {
+      allow read: if isSuperAdmin(); // Only Super Admins can view audit logs
+      allow create: if isAuthenticated(); // Anyone can create a log since actions trigger audits
+      allow update, delete: if false; // Immutable! No one can delete or modify history
+    }
+
+    // Customers
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow write: if isSalesUser();
+    }
+
+    // Invoices
+    match /invoices/{invoiceId} {
+      // Can read if global OR if the invoice belongs to their branch
+      allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
+      // Can create if they are a sales user and it's for their branch
+      allow create: if isSalesUser() && isCreatingForOwnBranch();
+      // Can update if they have access, but strictly prevent modifying core financials
+      allow update: if isSalesUser() && canAccessBranch(resource.data.branch)
+        && notModified('grandTotal')
+        && notModified('subTotal')
+        && notModified('createdAt')
+        && notModified('createdBy');
+      allow delete: if false; // Invoices should be cancelled, never deleted
+    }
+
+    // Sales Returns
+    match /sales_returns/{returnId} {
+      allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
+      allow create: if isSalesUser() && isCreatingForOwnBranch();
+      allow update: if isSalesUser() && canAccessBranch(resource.data.branch);
+      allow delete: if false; // Immutable
+    }
+
+    // -------------------------------------------------------------------------
+    // Stock Operations (Movements, Transfers, Adjustments, Receives)
+    // -------------------------------------------------------------------------
+
+    match /stock_movements/{movementId} {
+      allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
+      allow create: if isAuthenticated() && isCreatingForOwnBranch();
+      allow update, delete: if false; // Immutable
+    }
+    
+    match /stock_receives/{receiveId} {
+      allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
+      allow create: if (isInventoryManager() || isBranchManager()) && isCreatingForOwnBranch();
+      allow update, delete: if false; // Immutable
+    }
+
+    match /stock_adjustments/{adjustmentId} {
+      allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
+      allow create: if (isInventoryManager() || isBranchManager()) && isCreatingForOwnBranch();
+      allow update, delete: if false; // Immutable
+    }
+
+    match /stock_transfers/{transferId} {
+      // Transfers have two branches (source and destination).
+      allow read: if isAuthenticated() && (
+        getBranchId() == 'all' 
+        || (resource.data.sourceBranch != null && getBranchId() == resource.data.sourceBranch.lower())
+        || (resource.data.destinationBranch != null && getBranchId() == resource.data.destinationBranch.lower())
+      );
+      
+      // Can create if global OR if the source branch matches their assigned branch
+      allow create: if (isInventoryManager() || isBranchManager()) && (
+        getBranchId() == 'all' 
+        || (request.resource.data.sourceBranch != null && getBranchId() == request.resource.data.sourceBranch.lower())
+      );
+      
+      // Can update to change status (e.g. pending -> completed)
+      allow update: if (isInventoryManager() || isBranchManager());
+      allow delete: if false;
     }
   }
 }

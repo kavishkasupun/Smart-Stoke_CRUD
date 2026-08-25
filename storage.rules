@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to fetch user role from Firestore
+    // Note: Storage rules require firestore.get() for fetching Firestore data
+    function getUserRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isInventoryManager() {
+      let role = getUserRole();
+      return role == 'SUPER_ADMIN' || role == 'INVENTORY_MANAGER';
+    }
+
+    match /{allPaths=**} {
+      // Anyone logged in can read files (like product images)
+      allow read: if isAuthenticated();
+      
+      // Only Admins/Managers can upload files
+      // Restrict to images under 5MB
+      allow write: if isAuthenticated() 
+        && isInventoryManager()
+        && request.resource.size < 5 * 1024 * 1024 // 5MB max
+        && request.resource.contentType.matches('image/.*'); // Only images
+    }
+  }
+}

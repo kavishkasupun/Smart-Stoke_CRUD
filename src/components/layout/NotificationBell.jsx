@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../../services/notificationService';
 import { formatDistanceToNow } from 'date-fns';
 import { requestNotificationPermission, onMessageListener } from '../../firebase/messaging';
-import { saveUserFCMToken } from '../../services/notificationService';
+import { registerDeviceToken } from '../../services/notificationService';
 import { useToast } from '../../contexts/ToastContext';
 
 export default function NotificationBell() {
@@ -22,13 +22,15 @@ export default function NotificationBell() {
 
     // Ask for push permission and save token on load (if not already granted)
     const initPush = async () => {
-      // In a real app, you might wait for a user action to request this.
-      // But for internal operational apps, it's often done on login.
-      if (Notification.permission === 'default') {
-        const token = await requestNotificationPermission();
-        if (token) {
-          await saveUserFCMToken(userProfile.id, token);
-        }
+      let token = null;
+      if (Notification.permission === 'granted') {
+        token = await requestNotificationPermission();
+      } else if (Notification.permission === 'default') {
+        token = await requestNotificationPermission();
+      }
+      
+      if (token) {
+        await registerDeviceToken(userProfile.id, token);
       }
     };
     initPush();

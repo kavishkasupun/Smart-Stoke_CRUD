@@ -1,21 +1,38 @@
-import { collection, doc, query, where, getDocs, updateDoc, orderBy, onSnapshot, arrayUnion } from 'firebase/firestore';
+import { collection, doc, query, where, getDocs, updateDoc, orderBy, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { COLLECTIONS } from '../config/collections';
 
 /**
- * Save an FCM token to a user's document
+ * Save an FCM token to a user's fcm_tokens subcollection
  * @param {string} userId 
  * @param {string} token 
  */
-export const saveUserFCMToken = async (userId, token) => {
+export const registerDeviceToken = async (userId, token) => {
   if (!userId || !token) return;
   try {
-    const userRef = doc(db, COLLECTIONS.USERS, userId);
-    await updateDoc(userRef, {
-      fcmTokens: arrayUnion(token)
+    const tokenRef = doc(db, COLLECTIONS.USERS, userId, 'fcm_tokens', token);
+    await setDoc(tokenRef, {
+      token,
+      updatedAt: new Date().toISOString(),
+      deviceInfo: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'
     });
   } catch (error) {
-    console.error('[NotificationService] Error saving FCM token:', error);
+    console.error('[NotificationService] Error registering device token:', error);
+  }
+};
+
+/**
+ * Remove an FCM token from a user's fcm_tokens subcollection
+ * @param {string} userId 
+ * @param {string} token 
+ */
+export const unregisterDeviceToken = async (userId, token) => {
+  if (!userId || !token) return;
+  try {
+    const tokenRef = doc(db, COLLECTIONS.USERS, userId, 'fcm_tokens', token);
+    await deleteDoc(tokenRef);
+  } catch (error) {
+    console.error('[NotificationService] Error unregistering device token:', error);
   }
 };
 

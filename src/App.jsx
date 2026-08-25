@@ -17,6 +17,7 @@ import Users from './pages/settings/Users';
 import UserForm from './pages/settings/UserForm';
 import UserDetails from './pages/settings/UserDetails';
 import AuditLogs from './pages/settings/AuditLogs';
+import NotificationSettings from './pages/settings/NotificationSettings';
 
 // Reports Pages
 import ReportsDashboard from './pages/reports/ReportsDashboard';
@@ -130,7 +131,7 @@ function App() {
                       <Route path="/settings/users/:id" element={<UserDetails />} />
                       <Route path="/settings/audit-logs" element={<AuditLogs />} />
                     </Route>
-                    <Route path="/settings/notifications" element={<PlaceholderPage />} />
+                    <Route path="/settings/notifications" element={<NotificationSettings />} />
 
                     {/* 404 */}
                     <Route path="*" element={<NotFound />} />

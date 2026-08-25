@@ -13,3 +13,4 @@ initializeApp();
 // exports.stock = require('./src/stock');
 // exports.billing = require('./src/billing');
 exports.notifications = require('./src/notifications');
+exports.transfers = require('./src/transferNotifications');

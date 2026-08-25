@@ -70,25 +70,58 @@ exports.checkLowStock = onDocumentUpdated('product_variants/{variantId}', async 
     const variantName = afterData.size ? `${afterData.name} (${afterData.size})` : afterData.name;
     const fullName = `${productName} - ${variantName}`;
 
-    // 2. Fetch Users to notify (Admins, Inventory Managers, Branch Managers)
+    // 2. Fetch Users to notify based on preferences
     const usersSnap = await db.collection('users').get();
     const targetUsers = [];
     
     usersSnap.forEach(doc => {
       const user = { id: doc.id, ...doc.data() };
-      const role = user.role;
-      if (role === 'SUPER_ADMIN' || role === 'INVENTORY_MANAGER') {
-        targetUsers.push(user);
-      } else if (role === 'MABOLA_MANAGER' && alerts.some(a => a.branch === 'Mabola')) {
-        targetUsers.push(user);
-      } else if (role === 'JAFFNA_MANAGER' && alerts.some(a => a.branch === 'Jaffna')) {
+      const prefs = user.preferences;
+      
+      let shouldNotify = false;
+      
+      if (prefs) {
+        if (alerts.some(a => a.branch === 'Mabola') && prefs.mabolaLowStock) shouldNotify = true;
+        if (alerts.some(a => a.branch === 'Jaffna') && prefs.jaffnaLowStock) shouldNotify = true;
+      } else {
+        // Fallback if no preferences exist
+        const role = user.role;
+        if (role === 'SUPER_ADMIN' || role === 'INVENTORY_MANAGER') {
+          shouldNotify = true;
+        } else if (role === 'MABOLA_MANAGER' && alerts.some(a => a.branch === 'Mabola')) {
+          shouldNotify = true;
+        } else if (role === 'JAFFNA_MANAGER' && alerts.some(a => a.branch === 'Jaffna')) {
+          shouldNotify = true;
+        }
+      }
+
+      if (shouldNotify && user.active !== false) {
         targetUsers.push(user);
       }
     });
 
     if (targetUsers.length === 0) return null;
 
-    // 3. Process each alert
+    // 3. Fetch all fcm_tokens from subcollections concurrently
+    const tokenPromises = targetUsers.map(async (user) => {
+      const tokensSnap = await db.collection('users').doc(user.id).collection('fcm_tokens').get();
+      return {
+        userId: user.id,
+        tokens: tokensSnap.docs.map(tDoc => tDoc.id)
+      };
+    });
+    const userTokensArray = await Promise.all(tokenPromises);
+    
+    const allTokens = [];
+    const tokenToUserMap = {};
+    userTokensArray.forEach(ut => {
+      ut.tokens.forEach(t => {
+        allTokens.push(t);
+        tokenToUserMap[t] = ut.userId;
+      });
+    });
+
+    // 4. Process each alert
     for (const alert of alerts) {
       const title = alert.isOut ? 'Out of Stock Alert!' : 'Low Stock Alert!';
       const body = alert.isOut 
@@ -97,10 +130,7 @@ exports.checkLowStock = onDocumentUpdated('product_variants/{variantId}', async 
 
       // Construct FCM Message payload
       const notificationPayload = {
-        notification: {
-          title: title,
-          body: body
-        },
+        notification: { title, body },
         data: {
           type: alert.isOut ? 'OUT_OF_STOCK' : 'LOW_STOCK',
           variantId: variantId,
@@ -108,12 +138,17 @@ exports.checkLowStock = onDocumentUpdated('product_variants/{variantId}', async 
         }
       };
 
-      // Create in-app notification doc and send push
+      // Create in-app notification doc
       const batch = db.batch();
-      const tokens = [];
-
+      
       targetUsers.forEach(user => {
-        // Create in-app notification
+        // Only create in-app notification if they requested this branch
+        const prefs = user.preferences;
+        if (prefs) {
+           if (alert.branch === 'Mabola' && !prefs.mabolaLowStock) return;
+           if (alert.branch === 'Jaffna' && !prefs.jaffnaLowStock) return;
+        }
+
         const notifRef = db.collection('notifications').doc();
         batch.set(notifRef, {
           userId: user.id,
@@ -125,27 +160,57 @@ exports.checkLowStock = onDocumentUpdated('product_variants/{variantId}', async 
           read: false,
           createdAt: new Date().toISOString()
         });
-
-        // Collect FCM tokens if they exist
-        if (Array.isArray(user.fcmTokens)) {
-          tokens.push(...user.fcmTokens);
-        }
       });
 
-      // Execute batch write for in-app notifications
       await batch.commit();
 
       // Send Push Notifications via FCM if tokens exist
-      if (tokens.length > 0) {
-        // Multicast message allows sending to up to 500 tokens
+      // Note: We filter tokens to only those belonging to users who should get this specific alert branch
+      const alertTokens = [];
+      const alertTokenToUserMap = {};
+      userTokensArray.forEach(ut => {
+        const user = targetUsers.find(u => u.id === ut.userId);
+        if (!user) return;
+        const prefs = user.preferences;
+        if (prefs) {
+           if (alert.branch === 'Mabola' && !prefs.mabolaLowStock) return;
+           if (alert.branch === 'Jaffna' && !prefs.jaffnaLowStock) return;
+        }
+        ut.tokens.forEach(t => {
+          alertTokens.push(t);
+          alertTokenToUserMap[t] = ut.userId;
+        });
+      });
+
+      if (alertTokens.length > 0) {
         const response = await messaging.sendEachForMulticast({
-          tokens: tokens,
+          tokens: alertTokens,
           notification: notificationPayload.notification,
           data: notificationPayload.data
         });
         console.log(`Successfully sent ${response.successCount} messages; ${response.failureCount} failed.`);
         
-        // (Optional) Handle invalid tokens and remove them from user docs here
+        // Clean up invalid tokens
+        if (response.failureCount > 0) {
+          const failedDeletes = [];
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success) {
+              const errorCode = resp.error?.code;
+              if (errorCode === 'messaging/invalid-registration-token' || 
+                  errorCode === 'messaging/registration-token-not-registered') {
+                const badToken = alertTokens[idx];
+                const uid = alertTokenToUserMap[badToken];
+                if (uid) {
+                  failedDeletes.push(db.collection('users').doc(uid).collection('fcm_tokens').doc(badToken).delete());
+                }
+              }
+            }
+          });
+          if (failedDeletes.length > 0) {
+            await Promise.all(failedDeletes);
+            console.log(`Cleaned up ${failedDeletes.length} invalid tokens.`);
+          }
+        }
       }
     }
   } catch (error) {

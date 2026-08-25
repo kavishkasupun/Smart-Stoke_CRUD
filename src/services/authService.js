@@ -1,6 +1,8 @@
 import { signInWithEmail, signOut, getCurrentUser } from '../firebase/auth';
 import { getDocument } from '../firebase/firestore';
 import { logAudit } from './auditService';
+import { requestNotificationPermission } from '../firebase/messaging';
+import { unregisterDeviceToken } from './notificationService';
 
 /**
  * Log in a user with email and password, and fetch their profile.
@@ -48,6 +50,16 @@ export const login = async (email, password) => {
  */
 export const logout = async () => {
   try {
+    const user = getCurrentUser();
+    if (user) {
+      // Unregister FCM Token
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const token = await requestNotificationPermission();
+        if (token) {
+          await unregisterDeviceToken(user.uid, token);
+        }
+      }
+    }
     await signOut();
   } catch (error) {
     console.error('[AuthService] Logout error:', error);

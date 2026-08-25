@@ -34,11 +34,41 @@ try {
     const notificationTitle = payload.notification?.title || 'Background Message';
     const notificationOptions = {
       body: payload.notification?.body || 'New update available.',
-      icon: '/favicon.svg'
+      icon: '/favicon.svg',
+      data: payload.data
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);
   });
+
+  self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    
+    // Customize URL based on notification data
+    let url = '/notifications';
+    if (event.notification.data?.type === 'LOW_STOCK' || event.notification.data?.type === 'OUT_OF_STOCK') {
+      url = '/stock-overview';
+    } else if (event.notification.data?.type === 'TRANSFER') {
+      url = '/stock-transfers';
+    }
+
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        // Check if there is already a window/tab open with the target URL
+        for (let i = 0; i < windowClients.length; i++) {
+          const client = windowClients[i];
+          // If so, just focus it.
+          if (client.url.includes(url) && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // If not, then open the target URL in a new window/tab.
+        if (clients.openWindow) {
+          return clients.openWindow(url);
+        }
+      })
+    );
+  });
 } catch (err) {
-  console.log('Failed to initialize Firebase in service worker (expected if config is missing).');
+  console.log('Failed to initialize Firebase in service worker (expected if config is missing).', err);
 }

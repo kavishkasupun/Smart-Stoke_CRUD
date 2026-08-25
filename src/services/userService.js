@@ -69,6 +69,14 @@ export const createUser = async (userData, adminProfile) => {
     // Sign out the secondary app immediately so we don't hold a dangling session
     await signOut(secondaryAuth);
 
+    // Generate default preferences based on role
+    const defaultPreferences = {
+      mabolaLowStock: userData.role === 'SUPER_ADMIN' || userData.role === 'INVENTORY_MANAGER' || userData.role === 'MABOLA_MANAGER',
+      jaffnaLowStock: userData.role === 'SUPER_ADMIN' || userData.role === 'INVENTORY_MANAGER' || userData.role === 'JAFFNA_MANAGER',
+      transfers: userData.role !== 'VIEWER',
+      system: true
+    };
+
     // 2. Create the user profile in Firestore
     const userProfileData = {
       email: userData.email,
@@ -76,6 +84,7 @@ export const createUser = async (userData, adminProfile) => {
       role: userData.role,
       branchId: userData.branchId || null,
       active: true,
+      preferences: defaultPreferences,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

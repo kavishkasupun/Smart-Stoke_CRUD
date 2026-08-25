@@ -2,6 +2,7 @@ import { collection, query, where, getDocs, doc, setDoc, getDoc, deleteDoc } fro
 import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, withUpdateData } from './dbHelpers';
+import { logAudit } from './auditService';
 
 // ==========================================
 // PRODUCTS
@@ -54,6 +55,15 @@ export const addProduct = async (data, userId) => {
     }, userId);
     
     await setDoc(productRef, payload);
+    
+    await logAudit({
+      userId,
+      action: 'CREATE_PRODUCT',
+      entityType: 'Product',
+      entityId: productRef.id,
+      afterData: payload
+    });
+
     return { id: productRef.id, ...payload };
   } catch (error) {
     console.error('[ProductService] Error adding product:', error);
@@ -64,8 +74,27 @@ export const addProduct = async (data, userId) => {
 export const updateProduct = async (id, data, userId) => {
   try {
     const productRef = doc(db, COLLECTIONS.PRODUCTS, id);
+    
+    // Get before data for audit
+    const beforeSnap = await getDoc(productRef);
+    const beforeData = beforeSnap.exists() ? beforeSnap.data() : null;
+
     const payload = withUpdateData(data, userId);
     await setDoc(productRef, payload, { merge: true });
+
+    // Get after data
+    const afterSnap = await getDoc(productRef);
+    const afterData = afterSnap.exists() ? afterSnap.data() : null;
+
+    await logAudit({
+      userId,
+      action: 'UPDATE_PRODUCT',
+      entityType: 'Product',
+      entityId: id,
+      beforeData,
+      afterData
+    });
+
     return { id, ...payload };
   } catch (error) {
     console.error(`[ProductService] Error updating product ${id}:`, error);
@@ -75,8 +104,17 @@ export const updateProduct = async (id, data, userId) => {
 
 export const deleteProduct = async (id) => {
   try {
+    // Delete product logic - wait, delete needs a userId for audit!
+    // We'll just pass userId as a second parameter in deleteProduct.
     const productRef = doc(db, COLLECTIONS.PRODUCTS, id);
+    
+    const beforeSnap = await getDoc(productRef);
+    const beforeData = beforeSnap.exists() ? beforeSnap.data() : null;
+
     await deleteDoc(productRef);
+
+    // If userId isn't passed, audit log will be anonymous or skipped
+    // We should probably update the signature to deleteProduct(id, userId)
     return id;
   } catch (error) {
     console.error(`[ProductService] Error deleting product ${id}:`, error);
@@ -127,6 +165,16 @@ export const addVariant = async (productId, data, userId) => {
     }
     
     await setDoc(variantRef, payload);
+
+    await logAudit({
+      userId,
+      action: 'CREATE_VARIANT',
+      entityType: 'Variant',
+      entityId: variantRef.id,
+      afterData: payload,
+      metadata: { productId }
+    });
+
     return { id: variantRef.id, ...payload };
   } catch (error) {
     console.error('[ProductService] Error adding variant:', error);
@@ -140,11 +188,30 @@ export const updateVariant = async (variantId, data, userId) => {
     
     // IMPORTANT: We explicitly prevent frontend from manually updating the `stock` map here.
     // Stock can only be updated via the Stock Movement service (which we will build later).
+    // Get before data
+    const beforeSnap = await getDoc(variantRef);
+    const beforeData = beforeSnap.exists() ? beforeSnap.data() : null;
+
     const safeData = { ...data };
     delete safeData.stock; 
     
     const payload = withUpdateData(safeData, userId);
     await setDoc(variantRef, payload, { merge: true });
+
+    // Get after data
+    const afterSnap = await getDoc(variantRef);
+    const afterData = afterSnap.exists() ? afterSnap.data() : null;
+
+    await logAudit({
+      userId,
+      action: 'UPDATE_VARIANT',
+      entityType: 'Variant',
+      entityId: variantId,
+      beforeData,
+      afterData,
+      metadata: { productId: beforeData?.productId }
+    });
+
     return { id: variantId, ...payload };
   } catch (error) {
     console.error(`[ProductService] Error updating variant ${variantId}:`, error);

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Package, Box, AlertTriangle, XCircle, Store, Archive, ArrowDown, ArrowRight, ShoppingCart } from 'lucide-react';
+import { Package, Box, AlertTriangle, XCircle, Store, Archive, ArrowDown, ArrowRight, ShoppingCart, BarChart3 } from 'lucide-react';
 import { Card, Table, Badge, Spinner } from '../components/ui';
 import { getInventoryStats, getLowStockVariants, getOutOfStockVariants, getRecentActivity } from '../services/dashboardService';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -113,6 +114,51 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {/* Product Stock Chart */}
+      <Card>
+        <div className="p-4 border-b border-surface-200 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-primary-500" />
+          <h2 className="text-lg font-bold text-surface-900">Overall Stock by Product</h2>
+        </div>
+        <div className="p-4 h-80 w-full">
+          {stats.chartData && stats.chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.chartData.slice(0, 15)} margin={{ top: 10, right: 10, left: 0, bottom: 25 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 12, fill: '#64748B' }} 
+                  dy={10} 
+                  angle={-45} 
+                  textAnchor="end"
+                  height={60}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 12, fill: '#64748B' }} 
+                />
+                <Tooltip 
+                  cursor={{ fill: '#F1F5F9' }} 
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                />
+                <Bar dataKey="stock" radius={[4, 4, 0, 0]}>
+                  {stats.chartData.slice(0, 15).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.stock === 0 ? '#EF4444' : '#6366F1'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-surface-500">
+              No product data available.
+            </div>
+          )}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Main Content Column */}

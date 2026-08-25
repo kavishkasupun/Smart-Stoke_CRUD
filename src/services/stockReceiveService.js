@@ -2,6 +2,7 @@ import { collection, doc, query, where, getDocs, orderBy } from 'firebase/firest
 import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData } from './dbHelpers';
+import { logAudit } from './auditService';
 
 /**
  * Process a stock receive atomically
@@ -101,15 +102,16 @@ export const processStockReceive = async (receiveData, items, userId) => {
       }, userId);
       transaction.set(receiveDocRef, receivePayload);
 
-      // Create Audit Log
-      const auditLogRef = doc(collection(db, COLLECTIONS.AUDIT_LOGS));
-      const auditPayload = withCreationData({
-        action: 'STOCK_RECEIVE',
-        entityId: receiveData.referenceId,
-        entityType: 'STOCK_RECEIVES',
-        details: `Received ${items.length} items to ${receiveData.destinationBranch}`,
-      }, userId);
-      transaction.set(auditLogRef, auditPayload);
+    });
+
+    // Fire-and-forget unified audit log outside of the transaction
+    await logAudit({
+      userId,
+      action: 'RECEIVE_STOCK',
+      entityType: 'StockReceive',
+      entityId: receiveData.referenceId,
+      branchId: receiveData.destinationBranch,
+      metadata: { itemsCount: items.length }
     });
 
     return receiveData.referenceId;

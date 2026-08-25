@@ -20,7 +20,15 @@ export function formatCurrency(amount) {
  */
 export function formatDate(date, { includeTime = false } = {}) {
   if (!date) return '—';
-  const d = new Date(date);
+  
+  // Handle Firestore Timestamp
+  let d;
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    d = new Date(date.seconds * 1000);
+  } else {
+    d = new Date(date);
+  }
+
   if (isNaN(d.getTime())) return '—';
 
   const dateStr = d.toLocaleDateString('en-GB', {

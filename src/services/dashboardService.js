@@ -10,40 +10,52 @@ export const getInventoryStats = async () => {
     const productsRef = collection(db, COLLECTIONS.PRODUCTS);
     const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
 
-    // Get Total Active Products
+    // Get Total Active Products (Still using getCountFromServer as it only filters by active)
     const productsQuery = query(productsRef, where('active', '==', true));
     const productsCountSnap = await getCountFromServer(productsQuery);
     const totalProducts = productsCountSnap.data().count;
 
-    // Get Total Active Variants
+    // Fetch all active variants once to calculate everything else
+    // This avoids requiring composite indexes for aggregations on dynamic fields
     const variantsQuery = query(variantsRef, where('active', '==', true));
-    const variantsCountSnap = await getCountFromServer(variantsQuery);
-    const totalVariants = variantsCountSnap.data().count;
-
-    // Get Stock Aggregations (Mabola, Jaffna, Overall)
-    const stockAggregations = await getAggregateFromServer(variantsQuery, {
-      totalMabola: sum('stock.mabola'),
-      totalJaffna: sum('stock.jaffna'),
-      totalOverall: sum('stock.overall')
-    });
-
-    const mabolaStock = stockAggregations.data().totalMabola || 0;
-    const jaffnaStock = stockAggregations.data().totalJaffna || 0;
-    const overallStock = stockAggregations.data().totalOverall || 0;
-
-    // Out of stock variants count
-    const outOfStockQuery = query(variantsQuery, where('stock.overall', '==', 0));
-    const outOfStockCountSnap = await getCountFromServer(outOfStockQuery);
-    const outOfStockCount = outOfStockCountSnap.data().count;
-
-    // Since we cannot query stock.overall <= reorderLevel directly in Firestore,
-    // we fetch active variants to calculate Low Stock Count. 
-    // In future, adding 'isLowStock: boolean' to variant doc is recommended.
     const allVariantsSnap = await getDocs(variantsQuery);
     const activeVariants = allVariantsSnap.docs.map(doc => doc.data());
-    const lowStockCount = activeVariants.filter(v => 
-      v.stock?.overall > 0 && v.stock?.overall <= (v.reorderLevel || 0)
-    ).length;
+
+    const totalVariants = activeVariants.length;
+
+    let mabolaStock = 0;
+    let jaffnaStock = 0;
+    let overallStock = 0;
+    let outOfStockCount = 0;
+    let lowStockCount = 0;
+    const chartDataMap = {};
+
+    activeVariants.forEach(v => {
+      const mabola = v.stock?.mabola || 0;
+      const jaffna = v.stock?.jaffna || 0;
+      const overall = v.stock?.overall || 0;
+      const reorderLevel = v.reorderLevel || 0;
+
+      mabolaStock += mabola;
+      jaffnaStock += jaffna;
+      overallStock += overall;
+
+      if (overall === 0) {
+        outOfStockCount++;
+      } else if (overall > 0 && overall <= reorderLevel) {
+        lowStockCount++;
+      }
+
+      // Aggregate for chart
+      if (v.name) {
+        if (!chartDataMap[v.name]) {
+          chartDataMap[v.name] = { name: v.name, stock: 0 };
+        }
+        chartDataMap[v.name].stock += overall;
+      }
+    });
+
+    const chartData = Object.values(chartDataMap).sort((a, b) => b.stock - a.stock);
 
     return {
       totalProducts,
@@ -52,7 +64,8 @@ export const getInventoryStats = async () => {
       jaffnaStock,
       overallStock,
       outOfStockCount,
-      lowStockCount
+      lowStockCount,
+      chartData
     };
   } catch (error) {
     console.error('[DashboardService] Error fetching inventory stats:', error);
@@ -87,10 +100,13 @@ export const getLowStockVariants = async () => {
 export const getOutOfStockVariants = async () => {
   try {
     const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
-    const outOfStockQuery = query(variantsRef, where('active', '==', true), where('stock.overall', '==', 0));
-    const snapshot = await getDocs(outOfStockQuery);
+    // Since Firebase sometimes complains about composite indexes with active=true and stock=0 without index,
+    // we can query active and filter on client to avoid index creation for now.
+    const variantsQuery = query(variantsRef, where('active', '==', true));
+    const snapshot = await getDocs(variantsQuery);
     
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const allVariants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return allVariants.filter(v => v.stock?.overall === 0);
   } catch (error) {
     console.error('[DashboardService] Error fetching out of stock variants:', error);
     throw error;

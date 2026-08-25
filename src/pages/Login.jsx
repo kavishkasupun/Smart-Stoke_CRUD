@@ -81,6 +81,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               icon={<Mail className="w-4 h-4" />}
+              autoComplete="username"
               required
             />
 
@@ -91,6 +92,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               icon={<Lock className="w-4 h-4" />}
+              autoComplete="current-password"
               iconRight={
                 <button
                   type="button"

@@ -14,5 +14,7 @@ export const COLLECTIONS = {
   STOCK_ADJUSTMENTS: 'stock_adjustments',
   STOCK_RECEIVES: 'stock_receives',
   AUDIT_LOGS: 'audit_logs',
-  CUSTOMERS: 'customers'
+  CUSTOMERS: 'customers',
+  INVOICES: 'invoices',
+  SALES_RETURNS: 'sales_returns'
 };

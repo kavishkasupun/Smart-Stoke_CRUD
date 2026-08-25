@@ -2,6 +2,7 @@ import { collection, doc, query, orderBy, getDocs } from 'firebase/firestore';
 import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, generateReferenceNumber } from './dbHelpers';
+import { logAudit } from './auditService';
 
 /**
  * Process a stock adjustment atomically
@@ -86,15 +87,15 @@ export const createAdjustment = async (adjustmentData, userId) => {
       }, userId);
       transaction.set(adjustmentRef, adjPayload);
 
-      // Create Audit Log
-      const auditLogRef = doc(collection(db, COLLECTIONS.AUDIT_LOGS));
-      const auditPayload = withCreationData({
-        action: 'STOCK_ADJUSTMENT',
-        entityId: referenceId,
-        entityType: 'STOCK_ADJUSTMENTS',
-        details: `Adjusted stock by ${adjustQty} in ${branch} due to ${type}`,
-      }, userId);
-      transaction.set(auditLogRef, auditPayload);
+    });
+    
+    await logAudit({
+      userId,
+      action: 'ADJUST_STOCK',
+      entityType: 'StockAdjustment',
+      entityId: referenceId,
+      branchId: branch,
+      metadata: { adjustQty, type, reason }
     });
 
     return referenceId;

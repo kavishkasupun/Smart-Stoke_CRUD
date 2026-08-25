@@ -29,6 +29,22 @@ export function canManageUsers(role) {
 }
 
 /**
+ * Check if the user can view audit logs
+ * @param {string} role 
+ */
+export function canViewAuditLogs(role) {
+  return hasRole(role, [USER_ROLES.SUPER_ADMIN]);
+}
+
+/**
+ * Check if the user can manage privileged roles
+ * @param {string} role 
+ */
+export function canManageRoles(role) {
+  return hasRole(role, [USER_ROLES.SUPER_ADMIN]);
+}
+
+/**
  * Check if the user can manage inventory (products, categories)
  * @param {string} role 
  */

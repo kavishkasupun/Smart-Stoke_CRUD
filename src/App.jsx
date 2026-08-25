@@ -7,11 +7,22 @@ import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { USER_ROLES } from './config/constants';
 
-// Pages
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
+
+// Settings Pages
+import Users from './pages/settings/Users';
+import UserForm from './pages/settings/UserForm';
+import UserDetails from './pages/settings/UserDetails';
+import AuditLogs from './pages/settings/AuditLogs';
+
+// Reports Pages
+import ReportsDashboard from './pages/reports/ReportsDashboard';
+import InventoryReport from './pages/reports/InventoryReport';
+import SalesReport from './pages/reports/SalesReport';
+import OperationsReport from './pages/reports/OperationsReport';
 
 // Inventory Pages
 import Categories from './pages/inventory/Categories';
@@ -38,6 +49,14 @@ import NotificationCenter from './pages/notifications/NotificationCenter';
 import Customers from './pages/customers/Customers';
 import CustomerForm from './pages/customers/CustomerForm';
 import CustomerDetails from './pages/customers/CustomerDetails';
+
+import Invoices from './pages/sales/Invoices';
+import InvoiceForm from './pages/sales/InvoiceForm';
+import InvoiceDetails from './pages/sales/InvoiceDetails';
+
+import SalesReturns from './pages/sales/SalesReturns';
+import CreateReturnForm from './pages/sales/CreateReturnForm';
+import ReturnDetails from './pages/sales/ReturnDetails';
 
 function App() {
   return (
@@ -81,8 +100,13 @@ function App() {
                     <Route path="/adjustments/:id" element={<AdjustmentDetails />} />
 
                     {/* Sales */}
-                    <Route path="/bills" element={<PlaceholderPage />} />
-                    <Route path="/bills/new" element={<PlaceholderPage />} />
+                    <Route path="/bills" element={<Invoices />} />
+                    <Route path="/bills/new" element={<InvoiceForm />} />
+                    <Route path="/bills/:id" element={<InvoiceDetails />} />
+                    
+                    <Route path="/sales-returns" element={<SalesReturns />} />
+                    <Route path="/sales-returns/new" element={<CreateReturnForm />} />
+                    <Route path="/sales-returns/:id" element={<ReturnDetails />} />
                     
                     {/* Notifications */}
                     <Route path="/notifications" element={<NotificationCenter />} />
@@ -94,15 +118,19 @@ function App() {
                     <Route path="/customers/:id/edit" element={<CustomerForm />} />
 
                     {/* Reports */}
-                    <Route path="/reports/sales" element={<PlaceholderPage />} />
-                    <Route path="/reports/stock" element={<PlaceholderPage />} />
+                    <Route path="/reports/dashboard" element={<ReportsDashboard />} />
+                    <Route path="/reports/inventory" element={<InventoryReport />} />
+                    <Route path="/reports/sales" element={<SalesReport />} />
+                    <Route path="/reports/operations" element={<OperationsReport />} />
 
                     {/* Settings - Only Super Admin can manage users */}
                     <Route element={<ProtectedRoute allowedRoles={[USER_ROLES.SUPER_ADMIN]} />}>
-                      <Route path="/settings/users" element={<PlaceholderPage />} />
+                      <Route path="/settings/users" element={<Users />} />
+                      <Route path="/settings/users/new" element={<UserForm />} />
+                      <Route path="/settings/users/:id" element={<UserDetails />} />
+                      <Route path="/settings/audit-logs" element={<AuditLogs />} />
                     </Route>
                     <Route path="/settings/notifications" element={<PlaceholderPage />} />
-                    <Route path="/settings/audit-logs" element={<PlaceholderPage />} />
 
                     {/* 404 */}
                     <Route path="*" element={<NotFound />} />

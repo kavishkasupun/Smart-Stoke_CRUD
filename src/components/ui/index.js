@@ -8,3 +8,4 @@ export { Table } from './Table';
 export { Spinner, Skeleton, PageLoader, ContentLoader } from './Loading';
 export { Badge } from './Badge';
 export { StatusBadge } from './StatusBadge';
+export { DateRangePicker } from './DateRangePicker';

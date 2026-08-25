@@ -122,6 +122,16 @@ export default function Products() {
             <Button 
               variant="ghost" 
               size="sm" 
+              onClick={() => navigate(`/products/${id}/edit`)}
+              icon={<Edit2 className="w-4 h-4" />}
+            >
+              Edit
+            </Button>
+          )}
+          {canManage && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
               className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
               onClick={() => handleDelete(id)}
               icon={<Trash2 className="w-4 h-4" />}

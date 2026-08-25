@@ -61,8 +61,10 @@ export const NAV_SECTIONS = [
     id: 'reports',
     label: 'Reports',
     items: [
+      { id: 'reports-dashboard', label: 'Analytics', icon: LayoutDashboard, path: '/reports/dashboard' },
+      { id: 'inventory-reports', label: 'Inventory Reports', icon: TrendingUp, path: '/reports/inventory' },
+      { id: 'operations-reports', label: 'Operations Reports', icon: ArrowLeftRight, path: '/reports/operations' },
       { id: 'sales-reports', label: 'Sales Reports', icon: BarChart3, path: '/reports/sales' },
-      { id: 'stock-reports', label: 'Stock Reports', icon: TrendingUp, path: '/reports/stock' },
     ],
   },
   {

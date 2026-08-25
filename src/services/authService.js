@@ -1,5 +1,6 @@
 import { signInWithEmail, signOut, getCurrentUser } from '../firebase/auth';
 import { getDocument } from '../firebase/firestore';
+import { logAudit } from './auditService';
 
 /**
  * Log in a user with email and password, and fetch their profile.
@@ -26,6 +27,14 @@ export const login = async (email, password) => {
       await signOut();
       throw new Error('Your account has been deactivated.');
     }
+    // Log Audit
+    await logAudit({
+      userId: user.uid,
+      userName: profile.name,
+      action: 'LOGIN',
+      entityType: 'User',
+      entityId: user.uid
+    });
     
     return { authUser: user, profile };
   } catch (error) {

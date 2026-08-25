@@ -2,6 +2,7 @@ import { collection, doc, query, where, getDocs, orderBy, updateDoc } from 'fire
 import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, withUpdateData, generateReferenceNumber } from './dbHelpers';
+import { logAudit } from './auditService';
 
 /**
  * Initiate a new stock transfer (Status: PENDING)
@@ -39,13 +40,17 @@ export const createTransfer = async (transferData, items, userId) => {
     await setDoc(transferRef, payload);
     
     // Also create an audit log
-    const auditLogRef = doc(collection(db, COLLECTIONS.AUDIT_LOGS));
-    await setDoc(auditLogRef, withCreationData({
-      action: 'TRANSFER_CREATED',
+    await logAudit({
+      userId,
+      action: 'TRANSFER_STOCK',
+      entityType: 'StockTransfer',
       entityId: referenceId,
-      entityType: 'STOCK_TRANSFERS',
-      details: `Created transfer request from ${transferData.sourceBranch} to ${transferData.destinationBranch}`,
-    }, userId));
+      branchId: transferData.sourceBranch,
+      metadata: { 
+        destinationBranch: transferData.destinationBranch, 
+        itemsCount: items.length 
+      }
+    });
 
     return referenceId;
   } catch (error) {
@@ -161,15 +166,13 @@ export const completeTransfer = async (referenceId, userId) => {
       // Update Transfer Status
       transaction.update(transferRef, withUpdateData({ status: 'COMPLETED' }, userId));
 
-      // Create Audit Log
-      const auditLogRef = doc(collection(db, COLLECTIONS.AUDIT_LOGS));
-      const auditPayload = withCreationData({
-        action: 'TRANSFER_COMPLETED',
-        entityId: referenceId,
-        entityType: 'STOCK_TRANSFERS',
-        details: `Approved and completed transfer ${referenceId}`,
-      }, userId);
-      transaction.set(auditLogRef, auditPayload);
+    });
+    
+    await logAudit({
+      userId,
+      action: 'TRANSFER_COMPLETED',
+      entityType: 'StockTransfer',
+      entityId: referenceId
     });
 
     return true;
@@ -195,13 +198,13 @@ export const cancelTransfer = async (referenceId, userId) => {
 
       transaction.update(transferRef, withUpdateData({ status: 'CANCELLED' }, userId));
 
-      const auditLogRef = doc(collection(db, COLLECTIONS.AUDIT_LOGS));
-      transaction.set(auditLogRef, withCreationData({
-        action: 'TRANSFER_CANCELLED',
-        entityId: referenceId,
-        entityType: 'STOCK_TRANSFERS',
-        details: `Cancelled transfer ${referenceId}`,
-      }, userId));
+    });
+    
+    await logAudit({
+      userId,
+      action: 'TRANSFER_CANCELLED',
+      entityType: 'StockTransfer',
+      entityId: referenceId
     });
     
     return true;

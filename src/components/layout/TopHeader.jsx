@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { Menu, Bell, Search, User, LogOut } from 'lucide-react';
 import { logout } from '../../services/authService';
+import { logAudit } from '../../services/auditService';
 import { USER_ROLE_LABELS } from '../../config/constants';
 import NotificationBell from './NotificationBell';
 
@@ -16,6 +17,15 @@ export function TopHeader() {
 
   const handleLogout = async () => {
     try {
+      if (userProfile) {
+        await logAudit({
+          userId: userProfile.id,
+          userName: userProfile.name,
+          action: 'LOGOUT',
+          entityType: 'User',
+          entityId: userProfile.id
+        });
+      }
       await logout();
     } catch (error) {
       console.error('Logout failed', error);

@@ -26,8 +26,8 @@ export default function SalesReport() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (userProfile.branch && userProfile.branch !== BRANCHES.GLOBAL) {
-      setBranchFilter(userProfile.branch);
+    if (userProfile.branchId && userProfile.branchId !== BRANCHES.GLOBAL) {
+      setBranchFilter(userProfile.branchId);
     }
   }, [userProfile]);
 
@@ -191,7 +191,7 @@ export default function SalesReport() {
           <Select 
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            disabled={userProfile.branch !== BRANCHES.GLOBAL}
+            disabled={userProfile.branchId !== BRANCHES.GLOBAL}
           >
             <option value="">All Branches</option>
             <option value="Mabola">Mabola</option>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Eye, Filter, Trash2, Edit2 } from 'lucide-react';
 import { Card, Table, Button, Input, Badge } from '../../components/ui';
@@ -8,6 +8,7 @@ import { getProducts, deleteProduct } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export default function Products() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function Products() {
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300);
   const [selectedCategory, setSelectedCategory] = useState('');
 
   useEffect(() => {
@@ -45,17 +47,21 @@ export default function Products() {
   };
 
   // Build a lookup map for category names
-  const categoryMap = categories.reduce((acc, cat) => {
-    acc[cat.id] = cat.name;
-    return acc;
-  }, {});
+  const categoryMap = React.useMemo(() => {
+    return categories.reduce((acc, cat) => {
+      acc[cat.id] = cat.name;
+      return acc;
+    }, {});
+  }, [categories]);
 
-  // Apply filters
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product?.name?.toLowerCase()?.includes(searchTerm.toLowerCase()) || false;
-    const matchesCategory = selectedCategory ? product.categoryId === selectedCategory : true;
-    return matchesSearch && matchesCategory;
-  });
+  // Apply filters using useMemo
+  const filteredProducts = React.useMemo(() => {
+    return products.filter(product => {
+      const matchesSearch = product?.name?.toLowerCase()?.includes(debouncedSearch.toLowerCase()) || false;
+      const matchesCategory = selectedCategory ? product.categoryId === selectedCategory : true;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, debouncedSearch, selectedCategory]);
 
   const handleDelete = async (id) => {
     const isConfirmed = await confirm({

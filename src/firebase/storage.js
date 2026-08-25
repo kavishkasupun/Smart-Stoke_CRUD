@@ -1,5 +1,6 @@
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { app } from './app';
+import { optimizeImage } from '../utils/imageOptimizer';
 
 /**
  * Firebase Storage Instance
@@ -13,10 +14,17 @@ export const storage = app ? getStorage(app) : null;
  * @param {object} [metadata] - Optional metadata (e.g., { contentType: 'image/jpeg' })
  * @returns {import('firebase/storage').UploadTask} The upload task (can be used to monitor progress)
  */
-export const uploadFile = (path, file, metadata = {}) => {
+export const uploadFile = async (path, file, metadata = {}) => {
   if (!storage) throw new Error('Storage not initialized');
   const storageRef = ref(storage, path);
-  return uploadBytesResumable(storageRef, file, metadata);
+  
+  try {
+    const optimizedFile = await optimizeImage(file);
+    return uploadBytesResumable(storageRef, optimizedFile, metadata);
+  } catch (error) {
+    console.warn('Image optimization failed, uploading original', error);
+    return uploadBytesResumable(storageRef, file, metadata);
+  }
 };
 
 /**

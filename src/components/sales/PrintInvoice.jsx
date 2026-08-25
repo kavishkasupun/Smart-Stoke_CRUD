@@ -12,7 +12,21 @@ const PrintInvoice = forwardRef(({ invoice }, ref) => {
       <div className="flex justify-between items-start border-b-4 border-danger-600 pb-6 mb-8">
         <div>
           {/* Logo & Company Info */}
-          <img src="/logo.png" alt="SMART Electronics" className="h-16 object-contain mb-3" />
+          <div className="mb-3">
+            <img 
+              src="/logo.png" 
+              alt="SMART Electronics" 
+              className="h-16 object-contain" 
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextElementSibling.style.display = 'block';
+              }}
+            />
+            <div className="hidden h-16 flex items-center">
+              <span className="text-2xl font-black text-primary-700 tracking-tight">SMART</span>
+              <span className="text-2xl font-bold text-surface-600 tracking-tight ml-1">Electronics</span>
+            </div>
+          </div>
           <div className="text-sm text-surface-600 space-y-1">
             <p>123 Business Road, Suite 100</p>
             <p>Colombo, Sri Lanka</p>

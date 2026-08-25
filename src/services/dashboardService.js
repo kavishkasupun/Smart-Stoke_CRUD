@@ -1,28 +1,44 @@
-import { collection, query, where, getDocs, getCountFromServer, getAggregateFromServer, sum } from 'firebase/firestore';
+import { collection, query, where, getDocs, getCountFromServer, doc, getDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
+
+// Cache for variants
+let cachedVariants = null;
+let lastVariantsFetchTime = null;
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+export const fetchAllActiveVariants = async (forceRefresh = false) => {
+  const now = Date.now();
+  if (!forceRefresh && cachedVariants && lastVariantsFetchTime && (now - lastVariantsFetchTime < CACHE_DURATION_MS)) {
+    return cachedVariants;
+  }
+  
+  const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
+  const variantsQuery = query(variantsRef, where('active', '==', true));
+  const snapshot = await getDocs(variantsQuery);
+  const variants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  
+  cachedVariants = variants;
+  lastVariantsFetchTime = now;
+  return variants;
+};
 
 /**
  * Fetch aggregated inventory statistics for the dashboard
  */
-export const getInventoryStats = async () => {
+export const getInventoryStats = async (forceRefresh = false) => {
   try {
+    // 1. Fetch total products count
     const productsRef = collection(db, COLLECTIONS.PRODUCTS);
-    const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
-
-    // Get Total Active Products (Still using getCountFromServer as it only filters by active)
     const productsQuery = query(productsRef, where('active', '==', true));
     const productsCountSnap = await getCountFromServer(productsQuery);
     const totalProducts = productsCountSnap.data().count;
 
-    // Fetch all active variants once to calculate everything else
-    // This avoids requiring composite indexes for aggregations on dynamic fields
-    const variantsQuery = query(variantsRef, where('active', '==', true));
-    const allVariantsSnap = await getDocs(variantsQuery);
-    const activeVariants = allVariantsSnap.docs.map(doc => doc.data());
-
-    const totalVariants = activeVariants.length;
-
+    // 2. Fetch all active variants
+    const variants = await fetchAllActiveVariants(forceRefresh);
+    
+    // 3. Compute stats in memory (Fallback since Cloud Functions aren't deployed)
+    let totalVariants = variants.length;
     let mabolaStock = 0;
     let jaffnaStock = 0;
     let overallStock = 0;
@@ -30,32 +46,33 @@ export const getInventoryStats = async () => {
     let lowStockCount = 0;
     const chartDataMap = {};
 
-    activeVariants.forEach(v => {
-      const mabola = v.stock?.mabola || 0;
-      const jaffna = v.stock?.jaffna || 0;
-      const overall = v.stock?.overall || 0;
-      const reorderLevel = v.reorderLevel || 0;
+    variants.forEach(v => {
+      const oStock = parseFloat(v.stock?.overall || 0) || 0;
+      const mStock = parseFloat(v.stock?.mabola || 0) || 0;
+      const jStock = parseFloat(v.stock?.jaffna || 0) || 0;
+      const reorder = parseFloat(v.reorderLevel || 0) || 0;
 
-      mabolaStock += mabola;
-      jaffnaStock += jaffna;
-      overallStock += overall;
+      overallStock += oStock;
+      mabolaStock += mStock;
+      jaffnaStock += jStock;
 
-      if (overall === 0) {
+      if (oStock === 0) {
         outOfStockCount++;
-      } else if (overall > 0 && overall <= reorderLevel) {
+      } else if (oStock <= reorder) {
         lowStockCount++;
       }
 
-      // Aggregate for chart
       if (v.name) {
         if (!chartDataMap[v.name]) {
           chartDataMap[v.name] = { name: v.name, stock: 0 };
         }
-        chartDataMap[v.name].stock += overall;
+        chartDataMap[v.name].stock += oStock;
       }
     });
 
-    const chartData = Object.values(chartDataMap).sort((a, b) => b.stock - a.stock);
+    const chartData = Object.values(chartDataMap)
+      .sort((a, b) => b.stock - a.stock)
+      .slice(0, 15);
 
     return {
       totalProducts,
@@ -78,16 +95,12 @@ export const getInventoryStats = async () => {
  */
 export const getLowStockVariants = async () => {
   try {
-    // Requires fetching active variants and filtering on client
-    const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
-    const variantsQuery = query(variantsRef, where('active', '==', true));
-    const snapshot = await getDocs(variantsQuery);
-    
-    const allVariants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    return allVariants.filter(v => 
-      v.stock?.overall > 0 && v.stock?.overall <= (v.reorderLevel || 0)
-    );
+    const allVariants = await fetchAllActiveVariants();
+    return allVariants.filter(v => {
+      const overall = parseFloat(v.stock?.overall || 0) || 0;
+      const reorder = parseFloat(v.reorderLevel || 0) || 0;
+      return overall > 0 && overall <= reorder;
+    });
   } catch (error) {
     console.error('[DashboardService] Error fetching low stock variants:', error);
     throw error;
@@ -99,14 +112,11 @@ export const getLowStockVariants = async () => {
  */
 export const getOutOfStockVariants = async () => {
   try {
-    const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
-    // Since Firebase sometimes complains about composite indexes with active=true and stock=0 without index,
-    // we can query active and filter on client to avoid index creation for now.
-    const variantsQuery = query(variantsRef, where('active', '==', true));
-    const snapshot = await getDocs(variantsQuery);
-    
-    const allVariants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return allVariants.filter(v => v.stock?.overall === 0);
+    const allVariants = await fetchAllActiveVariants();
+    return allVariants.filter(v => {
+      const overall = parseFloat(v.stock?.overall || 0) || 0;
+      return overall === 0;
+    });
   } catch (error) {
     console.error('[DashboardService] Error fetching out of stock variants:', error);
     throw error;

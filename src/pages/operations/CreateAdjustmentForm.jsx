@@ -42,7 +42,7 @@ export default function CreateAdjustmentForm() {
 
   useEffect(() => {
     // Permission check
-    if (userProfile && !canAdjustStock(userProfile.role, userProfile.branch, 'all')) {
+    if (userProfile && !canAdjustStock(userProfile.role, userProfile.branchId, 'all')) {
       toast.error("You don't have permission to adjust stock.");
       navigate('/stock-overview');
       return;

@@ -26,9 +26,7 @@ export default function InvoiceForm() {
 
   // Form State
   const [mode, setMode] = useState('PRICE_INCLUDED'); // 'PRICE_INCLUDED' or 'QUANTITY_ONLY'
-  const [selectedBranch, setSelectedBranch] = useState(
-    userProfile?.branch !== 'all' ? userProfile?.branch : ''
-  );
+  const [selectedBranch, setSelectedBranch] = useState('');
   const [isWalkIn, setIsWalkIn] = useState(true);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [walkInName, setWalkInName] = useState('');
@@ -42,6 +40,14 @@ export default function InvoiceForm() {
   useEffect(() => {
     fetchMasterData();
   }, []);
+
+  useEffect(() => {
+    // Auto-select branch if user is restricted to a specific branch
+    const uBranch = userProfile?.branchId || userProfile?.branch;
+    if (uBranch && uBranch !== 'all' && uBranch !== 'GLOBAL') {
+      setSelectedBranch(uBranch);
+    }
+  }, [userProfile]);
 
   const fetchMasterData = async () => {
     try {
@@ -233,10 +239,13 @@ export default function InvoiceForm() {
               <label className="block text-sm font-medium text-surface-700">Branch *</label>
               <select
                 required
-                className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-surface-100 disabled:text-surface-500"
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                disabled={userProfile?.branch !== 'all'}
+                disabled={(() => {
+                  const uBranch = userProfile?.branchId || userProfile?.branch;
+                  return !!uBranch && uBranch !== 'all' && uBranch !== 'GLOBAL';
+                })()}
               >
                 <option value="">Select branch</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}

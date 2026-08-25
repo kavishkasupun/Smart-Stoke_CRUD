@@ -17,8 +17,8 @@ export default function InventoryReport() {
 
   useEffect(() => {
     // If user is a branch manager, force their branch
-    if (userProfile.branch && userProfile.branch !== BRANCHES.GLOBAL) {
-      setBranchFilter(userProfile.branch);
+    if (userProfile.branchId && userProfile.branchId !== BRANCHES.GLOBAL) {
+      setBranchFilter(userProfile.branchId);
     }
     fetchData();
   }, [userProfile]);
@@ -178,7 +178,7 @@ export default function InventoryReport() {
           <Select 
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            disabled={userProfile.branch !== BRANCHES.GLOBAL}
+            disabled={userProfile.branchId !== BRANCHES.GLOBAL}
           >
             <option value="">All Branches</option>
             <option value="Mabola">Mabola</option>

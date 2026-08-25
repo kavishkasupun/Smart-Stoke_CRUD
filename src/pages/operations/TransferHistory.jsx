@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Eye } from 'lucide-react';
 import { Card, Table, Button, Input, Badge, Spinner } from '../../components/ui';
 import { getTransfersHistory } from '../../services/stockTransferService';
 import { formatDate } from '../../utils/formatters';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export default function TransferHistory() {
   const navigate = useNavigate();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
@@ -37,13 +39,15 @@ export default function TransferHistory() {
     }
   };
 
-  const filteredHistory = history.filter(item => {
-    const matchesSearch = item.referenceId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.sourceBranch?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.destinationBranch?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter ? item.status === statusFilter : true;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredHistory = React.useMemo(() => {
+    return history.filter(item => {
+      const matchesSearch = item.referenceId?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                            item.sourceBranch?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                            item.destinationBranch?.toLowerCase().includes(debouncedSearch.toLowerCase());
+      const matchesStatus = statusFilter ? item.status === statusFilter : true;
+      return matchesSearch && matchesStatus;
+    });
+  }, [history, debouncedSearch, statusFilter]);
 
   const columns = [
     { 

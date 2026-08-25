@@ -1,5 +1,6 @@
 import { useSidebar } from '../../contexts/SidebarContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { Menu, Bell, Search, User, LogOut } from 'lucide-react';
 import { logout } from '../../services/authService';
@@ -11,11 +12,21 @@ import NotificationBell from './NotificationBell';
  * Top header bar — sticky, contains hamburger menu, search, and user actions.
  */
 export function TopHeader() {
-  const { toggle } = useSidebar();
   const { userProfile } = useAuth();
+  const { toggle } = useSidebar();
+  const confirm = useConfirm();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const handleLogout = async () => {
+    const isConfirmed = await confirm({
+      title: 'Log Out',
+      message: 'Are you sure you want to log out?',
+      confirmText: 'Log Out',
+      cancelText: 'Cancel'
+    });
+    
+    if (!isConfirmed) return;
+
     try {
       if (userProfile) {
         await logAudit({
@@ -33,11 +44,11 @@ export function TopHeader() {
   };
 
   const roleLabel = userProfile ? USER_ROLE_LABELS[userProfile.role] : 'Guest';
-  const branchLabel = userProfile?.branch === 'all' 
+  const branchLabel = userProfile?.branchId === 'all' 
     ? 'All Branches' 
-    : userProfile?.branch === 'mabola' 
+    : userProfile?.branchId === 'mabola' 
       ? 'Mabola Branch' 
-      : userProfile?.branch === 'jaffna'
+      : userProfile?.branchId === 'jaffna'
         ? 'Jaffna Branch'
         : '';
 

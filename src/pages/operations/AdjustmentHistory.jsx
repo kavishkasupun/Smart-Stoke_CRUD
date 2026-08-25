@@ -15,7 +15,7 @@ export default function AdjustmentHistory() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [variantsMap, setVariantsMap] = useState({});
-  const canAdjust = userProfile ? canAdjustStock(userProfile.role, userProfile.branch, 'all') : false;
+  const canAdjust = userProfile ? canAdjustStock(userProfile.role, userProfile.branchId, 'all') : false;
 
   useEffect(() => {
     fetchHistory();

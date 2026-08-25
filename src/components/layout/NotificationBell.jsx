@@ -22,15 +22,19 @@ export default function NotificationBell() {
 
     // Ask for push permission and save token on load (if not already granted)
     const initPush = async () => {
-      let token = null;
-      if (Notification.permission === 'granted') {
-        token = await requestNotificationPermission();
-      } else if (Notification.permission === 'default') {
-        token = await requestNotificationPermission();
-      }
-      
-      if (token) {
-        await registerDeviceToken(userProfile.id, token);
+      try {
+        let token = null;
+        if (Notification.permission === 'granted') {
+          token = await requestNotificationPermission();
+        } else if (Notification.permission === 'default') {
+          token = await requestNotificationPermission();
+        }
+        
+        if (token) {
+          await registerDeviceToken(userProfile.id, token);
+        }
+      } catch (e) {
+        console.warn('Failed to get FCM token (normal if Cloud Messaging is disabled):', e.message);
       }
     };
     initPush();

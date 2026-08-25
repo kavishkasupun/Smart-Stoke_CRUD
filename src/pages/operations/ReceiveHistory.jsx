@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Eye, Filter } from 'lucide-react';
 import { Card, Table, Button, Input, Badge, Spinner } from '../../components/ui';
 import { getReceivesHistory } from '../../services/stockReceiveService';
 import { formatDate } from '../../utils/formatters';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export default function ReceiveHistory() {
   const navigate = useNavigate();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
   useEffect(() => {
     fetchHistory();
@@ -27,10 +29,12 @@ export default function ReceiveHistory() {
     }
   };
 
-  const filteredHistory = history.filter(item => 
-    item.referenceId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.supplier?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredHistory = React.useMemo(() => {
+    return history.filter(item => 
+      item.referenceId?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      item.supplier?.toLowerCase().includes(debouncedSearch.toLowerCase())
+    );
+  }, [history, debouncedSearch]);
 
   const columns = [
     { 

@@ -47,15 +47,13 @@ export const listenToNotifications = (userId, callback) => {
   
   const q = query(
     collection(db, 'notifications'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   );
 
   return onSnapshot(q, (snapshot) => {
-    const notifications = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const notifications = snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     callback(notifications);
   }, (error) => {
     console.error('[NotificationService] Error listening to notifications:', error);

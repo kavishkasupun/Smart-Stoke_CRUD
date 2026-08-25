@@ -202,7 +202,7 @@ export default function OperationsReport() {
               onEndChange={setEndDate}
             />
           </div>
-          <Button onClick={handleExportCSV} variant="secondary" icon={Download}>
+          <Button onClick={handleExportCSV} variant="secondary" icon={<Download className="w-4 h-4" />}>
             Export CSV
           </Button>
         </div>

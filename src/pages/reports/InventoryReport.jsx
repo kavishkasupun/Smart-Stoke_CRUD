@@ -103,21 +103,25 @@ export default function InventoryReport() {
     {
       header: 'Mabola Stock',
       accessor: 'stock',
+      key: 'mabolaStock',
       render: (s) => <span className="font-medium text-surface-700">{s?.mabola || 0}</span>
     },
     {
       header: 'Jaffna Stock',
       accessor: 'stock',
+      key: 'jaffnaStock',
       render: (s) => <span className="font-medium text-surface-700">{s?.jaffna || 0}</span>
     },
     {
       header: 'Overall Stock',
       accessor: 'stock',
+      key: 'overallStock',
       render: (s) => <span className="font-bold text-surface-900">{s?.overall || 0}</span>
     },
     {
       header: 'Status',
       accessor: 'stock',
+      key: 'status',
       render: (s, row) => {
         let targetStock = s?.overall || 0;
         if (branchFilter === 'Mabola') targetStock = s?.mabola || 0;
@@ -156,7 +160,7 @@ export default function InventoryReport() {
           <h1 className="text-2xl font-bold text-surface-900">Inventory Status Report</h1>
           <p className="text-sm text-surface-500 mt-1">Current snapshot of all products and variants.</p>
         </div>
-        <Button onClick={handleExportCSV} variant="secondary" icon={Download} disabled={filteredData.length === 0}>
+        <Button onClick={handleExportCSV} variant="secondary" icon={<Download className="w-4 h-4" />} disabled={filteredData.length === 0}>
           Export CSV
         </Button>
       </div>

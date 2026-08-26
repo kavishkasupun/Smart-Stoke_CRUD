@@ -28,14 +28,13 @@ exports.checkLowStock = onDocumentUpdated('product_variants/{variantId}', async 
   // Check Mabola
   const mabolaBefore = stockBefore.mabola || 0;
   const mabolaAfter = stockAfter.mabola || 0;
-  if (mabolaBefore > minMabola && mabolaAfter <= minMabola) {
+  if (mabolaAfter < mabolaBefore && mabolaAfter <= minMabola && mabolaAfter > 0) {
     alerts.push({
       branch: 'Mabola',
       currentStock: mabolaAfter,
-      isOut: mabolaAfter === 0
+      isOut: false
     });
-  } else if (mabolaBefore > 0 && mabolaAfter === 0) {
-    // Edge case: if min was 0, but it dropped to 0
+  } else if (mabolaAfter < mabolaBefore && mabolaAfter === 0) {
     alerts.push({
       branch: 'Mabola',
       currentStock: 0,
@@ -46,13 +45,13 @@ exports.checkLowStock = onDocumentUpdated('product_variants/{variantId}', async 
   // Check Jaffna
   const jaffnaBefore = stockBefore.jaffna || 0;
   const jaffnaAfter = stockAfter.jaffna || 0;
-  if (jaffnaBefore > minJaffna && jaffnaAfter <= minJaffna) {
+  if (jaffnaAfter < jaffnaBefore && jaffnaAfter <= minJaffna && jaffnaAfter > 0) {
     alerts.push({
       branch: 'Jaffna',
       currentStock: jaffnaAfter,
-      isOut: jaffnaAfter === 0
+      isOut: false
     });
-  } else if (jaffnaBefore > 0 && jaffnaAfter === 0) {
+  } else if (jaffnaAfter < jaffnaBefore && jaffnaAfter === 0) {
     alerts.push({
       branch: 'Jaffna',
       currentStock: 0,

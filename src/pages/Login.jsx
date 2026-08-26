@@ -10,7 +10,7 @@ import { login } from '../services/authService';
  */
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,7 +22,7 @@ export default function Login() {
     setError(null);
 
     try {
-      await login(email, password);
+      await login(identifier, password);
       // Navigation is handled by ProtectedRoute automatically, 
       // but we can explicitly route to dashboard as a fallback.
       navigate('/');
@@ -75,11 +75,11 @@ export default function Login() {
               </div>
             )}
             <Input
-              label="Email Address"
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              label="Email or Name"
+              type="text"
+              placeholder="you@company.com or John Doe"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               icon={<Mail className="w-4 h-4" />}
               autoComplete="username"
               required
@@ -136,24 +136,7 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Temporary Seed Admin Button */}
-          <div className="mt-8 pt-6 border-t border-surface-200 text-center">
-            <p className="text-sm text-surface-500 mb-3">Development Only:</p>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={async () => {
-                const { seedAdminUser } = await import('../scripts/seedAdmin');
-                // Use a fresh email to avoid conflicts with existing manually created accounts
-                const success = await seedAdminUser('superadmin@stoke.com', 'password123');
-                if (success) {
-                  alert(`Admin seeded successfully! You can now log in with:\nEmail: superadmin@stoke.com\nPassword: password123`);
-                }
-              }}
-            >
-              Seed Admin User
-            </Button>
-          </div>
+
         </div>
 
         {/* Footer */}

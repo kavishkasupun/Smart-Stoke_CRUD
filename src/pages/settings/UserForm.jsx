@@ -18,6 +18,7 @@ export default function UserForm() {
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     role: '',
     branchId: ''
   });
@@ -52,13 +53,18 @@ export default function UserForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.email.trim() || !formData.password || !formData.role) {
+    if (!formData.name.trim() || !formData.email.trim() || !formData.password || !formData.confirmPassword || !formData.role) {
       setError('All fields are required.');
       return;
     }
     
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
@@ -160,6 +166,20 @@ export default function UserForm() {
               autoComplete="new-password"
             />
 
+            <Input
+              label="Confirm Password"
+              type="password"
+              placeholder="Re-enter password"
+              value={formData.confirmPassword}
+              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+              required
+              disabled={submitting}
+              autoComplete="new-password"
+              error={formData.confirmPassword && formData.confirmPassword !== formData.password ? "Passwords do not match" : undefined}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-surface-700">
                 System Role <span className="text-danger-500">*</span>
@@ -182,10 +202,8 @@ export default function UserForm() {
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5 md:col-start-2">
+            <div className="space-y-1.5">
               <label className="block text-sm font-medium text-surface-700">
                 Assigned Branch <span className="text-danger-500">*</span>
               </label>

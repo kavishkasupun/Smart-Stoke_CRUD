@@ -3,17 +3,34 @@ import { getDocument } from '../firebase/firestore';
 import { logAudit } from './auditService';
 import { requestNotificationPermission } from '../firebase/messaging';
 import { unregisterDeviceToken } from './notificationService';
+import { db } from '../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 /**
- * Log in a user with email and password, and fetch their profile.
+ * Log in a user with email/name and password, and fetch their profile.
  * 
- * @param {string} email 
+ * @param {string} identifier (email or name)
  * @param {string} password 
  * @returns {Promise<object>} The user profile document from Firestore
  */
-export const login = async (email, password) => {
+export const login = async (identifier, password) => {
   try {
-    const userCredential = await signInWithEmail(email, password);
+    let loginEmail = identifier;
+
+    // If identifier doesn't have an '@', assume it's a name and lookup the email
+    if (!identifier.includes('@')) {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('name', '==', identifier));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        throw new Error('User not found with this name.');
+      }
+      
+      loginEmail = querySnapshot.docs[0].data().email;
+    }
+
+    const userCredential = await signInWithEmail(loginEmail, password);
     const user = userCredential.user;
     
     // Fetch their profile from Firestore

@@ -92,7 +92,16 @@ export const createUser = async (userData, adminProfile) => {
     const userRef = doc(db, COLLECTIONS.USERS, newUserId);
     await setDoc(userRef, userProfileData);
 
-    // 3. Log Audit
+    // 3. Send password reset email automatically
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, userData.email);
+    } catch (emailError) {
+      console.error('[UserService] Error sending password reset email:', emailError);
+      // Do not throw here, as the user was already created successfully.
+    }
+
+    // 4. Log Audit
     await logAudit({
       userId: adminProfile.id,
       userName: adminProfile.name,

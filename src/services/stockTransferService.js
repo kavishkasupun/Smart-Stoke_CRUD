@@ -3,6 +3,7 @@ import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, withUpdateData, generateReferenceNumber } from './dbHelpers';
 import { logAudit } from './auditService';
+import { checkAndCreateLowStockNotifications } from './notificationService';
 
 /**
  * Initiate a new stock transfer (Status: PENDING)
@@ -67,7 +68,7 @@ export const completeTransfer = async (referenceId, userId) => {
   try {
     const transferRef = doc(db, COLLECTIONS.STOCK_TRANSFERS, referenceId);
     
-    await runTransaction(db, async (transaction) => {
+    const result = await runTransaction(db, async (transaction) => {
       // 1. Read Transfer Doc
       const transferSnap = await transaction.get(transferRef);
       if (!transferSnap.exists()) throw new Error(`Transfer ${referenceId} not found.`);
@@ -115,6 +116,9 @@ export const completeTransfer = async (referenceId, userId) => {
 
         variantUpdates.push({
           ref: variantRefs[i],
+          variantId: item.variantId,
+          name: variantData.name,
+          minStock: variantData.minimumStockLevel || 0,
           data: { stock: newStock },
           sourceBeforeQty,
           sourceAfterQty: newStock[sourceKey],
@@ -166,6 +170,7 @@ export const completeTransfer = async (referenceId, userId) => {
       // Update Transfer Status
       transaction.update(transferRef, withUpdateData({ status: 'COMPLETED' }, userId));
 
+      return { transferData, variantUpdates };
     });
     
     await logAudit({
@@ -174,6 +179,21 @@ export const completeTransfer = async (referenceId, userId) => {
       entityType: 'StockTransfer',
       entityId: referenceId
     });
+
+    // Trigger low stock notifications for the source branch (non-blocking)
+    if (result.variantUpdates && result.variantUpdates.length > 0) {
+      const notificationPayloads = result.variantUpdates.map(u => ({
+        variantId: u.variantId,
+        name: u.name,
+        branch: result.transferData.sourceBranch,
+        beforeStock: u.sourceBeforeQty,
+        afterStock: u.sourceAfterQty,
+        minStock: u.minStock
+      }));
+      checkAndCreateLowStockNotifications(notificationPayloads).catch(e => 
+        console.error('[StockTransferService] Error triggering notifications:', e)
+      );
+    }
 
     return true;
   } catch (error) {

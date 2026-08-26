@@ -3,6 +3,7 @@ import { db } from '../firebase/firestore';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, generateReferenceNumber } from './dbHelpers';
 import { logAudit } from './auditService';
+import { checkAndCreateLowStockNotifications } from './notificationService';
 
 /**
  * Fetch all invoices
@@ -93,9 +94,11 @@ export const createInvoice = async (invoiceData, userProfile) => {
       variantUpdates.push({
         ref: snap.ref,
         productId: variantData.productId,
+        variantId: item.variantId,
         name: variantData.name,
         beforeQuantity: currentStock,
         afterQuantity: newBranchStock,
+        minStock: variantData.minimumStockLevel || 0,
         updates: {
           [`stock.${branch}`]: newBranchStock,
           'stock.overall': newOverallStock,
@@ -156,7 +159,7 @@ export const createInvoice = async (invoiceData, userProfile) => {
       transaction.set(movementRef, movementPayload);
     }
 
-    return { invoiceId: invoiceRef.id, invoiceNumber };
+    return { invoiceId: invoiceRef.id, invoiceNumber, variantUpdates };
   });
   
   await logAudit({
@@ -168,6 +171,21 @@ export const createInvoice = async (invoiceData, userProfile) => {
     branchId: invoiceData.branch,
     metadata: { invoiceNumber: result.invoiceNumber }
   });
+  
+  // Trigger low stock notifications (non-blocking)
+  if (result.variantUpdates && result.variantUpdates.length > 0) {
+    const notificationPayloads = result.variantUpdates.map(u => ({
+      variantId: u.variantId,
+      name: u.name,
+      branch: invoiceData.branch,
+      beforeStock: u.beforeQuantity,
+      afterStock: u.afterQuantity,
+      minStock: u.minStock
+    }));
+    checkAndCreateLowStockNotifications(notificationPayloads).catch(e => 
+      console.error('[InvoiceService] Error triggering notifications:', e)
+    );
+  }
   
   return result.invoiceId;
 };

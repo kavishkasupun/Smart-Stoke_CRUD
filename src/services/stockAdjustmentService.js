@@ -3,6 +3,7 @@ import { db, runTransaction } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
 import { withCreationData, generateReferenceNumber } from './dbHelpers';
 import { logAudit } from './auditService';
+import { checkAndCreateLowStockNotifications } from './notificationService';
 
 /**
  * Process a stock adjustment atomically
@@ -20,7 +21,7 @@ export const createAdjustment = async (adjustmentData, userId) => {
     const referenceId = generateReferenceNumber('ADJ');
     const adjustmentRef = doc(db, COLLECTIONS.STOCK_ADJUSTMENTS, referenceId);
     
-    await runTransaction(db, async (transaction) => {
+    const result = await runTransaction(db, async (transaction) => {
       // 1. Read Variant Doc
       const variantRef = doc(db, COLLECTIONS.PRODUCT_VARIANTS, variantId);
       const variantSnap = await transaction.get(variantRef);
@@ -87,6 +88,13 @@ export const createAdjustment = async (adjustmentData, userId) => {
       }, userId);
       transaction.set(adjustmentRef, adjPayload);
 
+      return {
+        variantId,
+        name: variantData.name,
+        minStock: variantData.minimumStockLevel || 0,
+        beforeQuantity,
+        afterQuantity
+      };
     });
     
     await logAudit({
@@ -97,6 +105,18 @@ export const createAdjustment = async (adjustmentData, userId) => {
       branchId: branch,
       metadata: { adjustQty, type, reason }
     });
+
+    // Trigger low stock notifications (non-blocking)
+    if (Number(adjustQty) < 0) {
+      checkAndCreateLowStockNotifications([{
+        variantId: result.variantId,
+        name: result.name,
+        branch,
+        beforeStock: result.beforeQuantity,
+        afterStock: result.afterQuantity,
+        minStock: result.minStock
+      }]).catch(e => console.error('[StockAdjustmentService] Error triggering notifications:', e));
+    }
 
     return referenceId;
   } catch (error) {

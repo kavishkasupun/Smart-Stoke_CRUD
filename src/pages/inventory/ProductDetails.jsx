@@ -113,6 +113,7 @@ export default function ProductDetails() {
     try {
       setSubmitting(true);
       setError(null);
+      toast.showLoading(editingVariant ? 'Updating Variant...' : 'Adding Variant...');
       
       const payload = {
         ...formData,
@@ -138,6 +139,7 @@ export default function ProductDetails() {
       toast.error('Failed to save variant. Please try again.');
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 
@@ -151,11 +153,14 @@ export default function ProductDetails() {
 
     if (isConfirmed) {
       try {
+        toast.showLoading('Deleting Variant...');
         await deleteVariant(variantId);
         toast.success('Variant deleted successfully!');
         fetchProductDetails();
       } catch (err) {
         toast.error('Failed to delete variant.');
+      } finally {
+        toast.hideLoading();
       }
     }
   };

@@ -1,10 +1,22 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { Toast } from '../components/ui/Toast';
+import { PageLoader } from '../components/ui/Loading';
 
 const ToastContext = createContext(null);
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Loading...');
+
+  const showLoading = useCallback((message = 'Loading...') => {
+    setLoadingMessage(message);
+    setIsLoading(true);
+  }, []);
+
+  const hideLoading = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   const addToast = useCallback((message, type = 'success', duration = 3000) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -15,14 +27,32 @@ export const ToastProvider = ({ children }) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const success = useCallback((message, duration) => addToast(message, 'success', duration), [addToast]);
-  const error = useCallback((message, duration) => addToast(message, 'error', duration), [addToast]);
-  const info = useCallback((message, duration) => addToast(message, 'info', duration), [addToast]);
-  const warning = useCallback((message, duration) => addToast(message, 'warning', duration), [addToast]);
+  const success = useCallback((message, duration) => {
+    hideLoading();
+    addToast(message, 'success', duration);
+  }, [addToast, hideLoading]);
+
+  const error = useCallback((message, duration) => {
+    hideLoading();
+    addToast(message, 'error', duration);
+  }, [addToast, hideLoading]);
+  
+  const info = useCallback((message, duration) => {
+    hideLoading();
+    addToast(message, 'info', duration);
+  }, [addToast, hideLoading]);
+  
+  const warning = useCallback((message, duration) => {
+    hideLoading();
+    addToast(message, 'warning', duration);
+  }, [addToast, hideLoading]);
 
   return (
-    <ToastContext.Provider value={{ addToast, success, error, info, warning }}>
+    <ToastContext.Provider value={{ addToast, success, error, info, warning, showLoading, hideLoading }}>
       {children}
+      
+      {isLoading && <PageLoader message={loadingMessage} />}
+
       {toasts.length > 0 && (
         <div className="fixed inset-0 bg-surface-900/20 backdrop-blur-sm z-[9998] transition-opacity duration-300 pointer-events-none" />
       )}

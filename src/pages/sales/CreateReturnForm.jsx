@@ -111,6 +111,7 @@ export default function CreateReturnForm() {
 
     try {
       setIsSubmitting(true);
+      toast.showLoading('Processing Return...');
       
       const returnData = {
         itemIndex: selectedItemIndex,
@@ -124,9 +125,10 @@ export default function CreateReturnForm() {
       toast.success('Sales return processed successfully!');
       navigate(`/sales-returns/${returnId}`);
     } catch (error) {
-      toast.error(error.message || 'Failed to process return');
+      toast.error(error.message || 'Failed to process return.');
     } finally {
       setIsSubmitting(false);
+      toast.hideLoading();
     }
   };
 

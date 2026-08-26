@@ -78,6 +78,7 @@ export default function Categories() {
     try {
       setSubmitting(true);
       setError(null);
+      toast.showLoading(editingCategory ? 'Updating Category...' : 'Adding Category...');
 
       if (editingCategory) {
         await updateCategory(editingCategory.id, formData, userProfile.id);
@@ -94,6 +95,7 @@ export default function Categories() {
       toast.error('Failed to save category. Please try again.');
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 
@@ -107,11 +109,14 @@ export default function Categories() {
     
     if (isConfirmed) {
       try {
+        toast.showLoading('Deleting Category...');
         await deleteCategory(id);
         toast.success('Category deleted successfully!');
         fetchCategories();
       } catch (err) {
         toast.error('Failed to delete category.');
+      } finally {
+        toast.hideLoading();
       }
     }
   };

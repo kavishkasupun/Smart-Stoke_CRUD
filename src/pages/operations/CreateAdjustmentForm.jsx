@@ -108,6 +108,7 @@ export default function CreateAdjustmentForm() {
 
     try {
       setSubmitting(true);
+      toast.showLoading('Adjusting Stock...');
       await createAdjustment(formData, userProfile.id);
       toast.success('Stock adjusted successfully!');
       navigate('/adjustments');
@@ -115,6 +116,7 @@ export default function CreateAdjustmentForm() {
       toast.error(error.message || 'Failed to adjust stock.');
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

@@ -165,6 +165,7 @@ export default function InvoiceForm() {
 
     try {
       setSubmitting(true);
+      toast.showLoading('Creating Invoice...');
       
       // Clean up item payload
       const payloadItems = items.map(item => {
@@ -203,6 +204,7 @@ export default function InvoiceForm() {
       toast.error(error.message || 'Failed to create invoice.');
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

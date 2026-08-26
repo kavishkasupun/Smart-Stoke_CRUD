@@ -78,6 +78,7 @@ export default function ProductForm() {
     try {
       setSubmitting(true);
       setError(null);
+      toast.showLoading(isEditMode ? 'Updating Product...' : 'Creating Product...');
 
       if (isEditMode) {
         await updateProduct(id, formData, userProfile.id);
@@ -93,7 +94,9 @@ export default function ProductForm() {
       console.error(err);
       setError('Failed to save product');
       toast.error('Failed to save product. Please try again.');
+    } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

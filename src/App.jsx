@@ -66,11 +66,7 @@ const SalesReturns = React.lazy(() => import('./pages/sales/SalesReturns'));
 const CreateReturnForm = React.lazy(() => import('./pages/sales/CreateReturnForm'));
 const ReturnDetails = React.lazy(() => import('./pages/sales/ReturnDetails'));
 
-const PageLoader = () => (
-  <div className="flex justify-center items-center h-full w-full p-20">
-    <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-  </div>
-);
+import { PageLoader } from './components/ui/Loading';
 
 function App() {
   return (

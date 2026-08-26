@@ -1,5 +1,4 @@
 import { cn } from '../../utils/cn';
-import { Loader2 } from 'lucide-react';
 
 /**
  * Loading spinner.
@@ -10,15 +9,15 @@ import { Loader2 } from 'lucide-react';
  */
 export function Spinner({ size = 'md', className }) {
   const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-6 h-6',
-    lg: 'w-8 h-8',
+    sm: 'w-12 h-12',
+    md: 'w-20 h-20',
+    lg: 'w-32 h-32',
   };
 
   return (
-    <Loader2
-      className={cn('animate-spin text-primary-600', sizeClasses[size], className)}
-    />
+    <div className={cn('flex items-center justify-center', sizeClasses[size], className)}>
+      <img src="/cube_blue.svg" alt="Loading..." className="w-full h-full object-contain" />
+    </div>
   );
 }
 

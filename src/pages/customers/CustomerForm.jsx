@@ -86,6 +86,7 @@ export default function CustomerForm() {
 
     try {
       setSubmitting(true);
+      toast.showLoading(isEditMode ? 'Updating Customer...' : 'Adding Customer...');
       if (isEditMode) {
         await updateCustomer(id, formData, userProfile.id);
         toast.success('Customer updated successfully');
@@ -98,6 +99,7 @@ export default function CustomerForm() {
       toast.error(`Failed to ${actionText} customer`);
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

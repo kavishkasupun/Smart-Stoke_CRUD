@@ -103,6 +103,7 @@ export default function ReceiveStockForm() {
 
     try {
       setSubmitting(true);
+      toast.showLoading('Receiving Stock...');
       await processStockReceive(receiveData, items, userProfile.id);
       toast.success('Stock received and inventory updated successfully!');
       navigate('/stock-receiving');
@@ -110,6 +111,7 @@ export default function ReceiveStockForm() {
       toast.error(error.message || 'Failed to process stock receive.');
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

@@ -82,6 +82,7 @@ export default function UserForm() {
     try {
       setSubmitting(true);
       setError(null);
+      toast.showLoading('Creating User...');
 
       await createUser(formData, userProfile);
       toast.success('User created successfully!');
@@ -97,6 +98,7 @@ export default function UserForm() {
       }
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

@@ -122,6 +122,7 @@ export default function CreateTransferForm() {
 
     try {
       setSubmitting(true);
+      toast.showLoading('Submitting Transfer Request...');
       await createTransfer(transferData, items, userProfile.id);
       toast.success('Transfer request created successfully!');
       navigate('/stock-transfers');
@@ -129,6 +130,7 @@ export default function CreateTransferForm() {
       toast.error(error.message || 'Failed to create transfer.');
     } finally {
       setSubmitting(false);
+      toast.hideLoading();
     }
   };
 

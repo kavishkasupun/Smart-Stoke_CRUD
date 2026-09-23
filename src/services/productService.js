@@ -51,6 +51,7 @@ export const addProduct = async (data, userId) => {
     const productRef = doc(collection(db, COLLECTIONS.PRODUCTS));
     const payload = withCreationData({
       ...data,
+      productType: data.productType || 'FINISHED_PRODUCT', // default to finished product for backward compatibility
       active: data.active !== undefined ? data.active : true,
     }, userId);
     

@@ -149,6 +149,19 @@ service cloud.firestore {
       allow delete: if false; // Immutable
     }
 
+    // Bill of Materials
+    match /boms/{bomId} {
+      allow read: if isAuthenticated();
+      allow write: if isInventoryManager();
+    }
+
+    // Productions
+    match /productions/{productionId} {
+      allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
+      allow create: if (isInventoryManager() || isBranchManager()) && isCreatingForOwnBranch();
+      allow update, delete: if false; // Immutable
+    }
+
     // -------------------------------------------------------------------------
     // Stock Operations (Movements, Transfers, Adjustments, Receives)
     // -------------------------------------------------------------------------

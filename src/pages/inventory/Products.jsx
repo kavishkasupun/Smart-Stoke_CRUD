@@ -25,6 +25,7 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 300);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedProductType, setSelectedProductType] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -59,7 +60,8 @@ export default function Products() {
     return products.filter(product => {
       const matchesSearch = product?.name?.toLowerCase()?.includes(debouncedSearch.toLowerCase()) || false;
       const matchesCategory = selectedCategory ? product.categoryId === selectedCategory : true;
-      return matchesSearch && matchesCategory;
+      const matchesType = selectedProductType ? product.productType === selectedProductType : true;
+      return matchesSearch && matchesCategory && matchesType;
     });
   }, [products, debouncedSearch, selectedCategory]);
 
@@ -99,6 +101,15 @@ export default function Products() {
       render: (val) => (
         <Badge variant="surface">
           {categoryMap[val] || 'Unknown'}
+        </Badge>
+      )
+    },
+    {
+      header: 'Type',
+      accessor: 'productType',
+      render: (val) => (
+        <Badge variant={val === 'RAW_MATERIAL' ? 'warning' : 'primary'}>
+          {val === 'RAW_MATERIAL' ? 'Raw Material' : 'Finished Product'}
         </Badge>
       )
     },
@@ -191,6 +202,19 @@ export default function Products() {
               {categories.map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
+            </select>
+          </div>
+          
+          <div className="w-full md:w-48 relative flex items-center">
+            <Filter className="w-4 h-4 absolute left-3 text-surface-400 pointer-events-none" />
+            <select
+              value={selectedProductType}
+              onChange={(e) => setSelectedProductType(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow appearance-none"
+            >
+              <option value="">All Types</option>
+              <option value="FINISHED_PRODUCT">Finished Products</option>
+              <option value="RAW_MATERIAL">Raw Materials</option>
             </select>
           </div>
         </div>

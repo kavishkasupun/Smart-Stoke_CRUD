@@ -36,8 +36,14 @@ const Products = React.lazy(() => import('./pages/inventory/Products'));
 const ProductForm = React.lazy(() => import('./pages/inventory/ProductForm'));
 const ProductDetails = React.lazy(() => import('./pages/inventory/ProductDetails'));
 const StockOverview = React.lazy(() => import('./pages/inventory/StockOverview'));
+const BillOfMaterials = React.lazy(() => import('./pages/inventory/BillOfMaterials'));
+const BomForm = React.lazy(() => import('./pages/inventory/BomForm'));
+const BomDetails = React.lazy(() => import('./pages/inventory/BomDetails'));
 
 // Operations Pages
+const ProductionList = React.lazy(() => import('./pages/operations/ProductionList'));
+const ProductionForm = React.lazy(() => import('./pages/operations/ProductionForm'));
+const ProductionDetails = React.lazy(() => import('./pages/operations/ProductionDetails'));
 const ReceiveHistory = React.lazy(() => import('./pages/operations/ReceiveHistory'));
 const ReceiveStockForm = React.lazy(() => import('./pages/operations/ReceiveStockForm'));
 const ReceiveDetails = React.lazy(() => import('./pages/operations/ReceiveDetails'));
@@ -96,8 +102,15 @@ function App() {
                       
                       <Route path="/categories" element={<Categories />} />
                       <Route path="/stock-overview" element={<StockOverview />} />
+                      <Route path="/boms" element={<BillOfMaterials />} />
+                      <Route path="/boms/new" element={<BomForm />} />
+                      <Route path="/boms/:id" element={<BomDetails />} />
+                      <Route path="/boms/:id/edit" element={<BomForm />} />
 
                       {/* Operations */}
+                      <Route path="/manufacturing" element={<ProductionList />} />
+                      <Route path="/manufacturing/new" element={<ProductionForm />} />
+                      <Route path="/manufacturing/:id" element={<ProductionDetails />} />
                       <Route path="/stock-receiving" element={<ReceiveHistory />} />
                       <Route path="/stock-receiving/new" element={<ReceiveStockForm />} />
                       <Route path="/stock-receiving/:id" element={<ReceiveDetails />} />

@@ -279,6 +279,7 @@ export default function ProductDetails() {
             <div className="flex items-center gap-4 text-sm text-surface-500 mt-1">
               <span>Category: <span className="font-medium text-surface-700">{categoryName}</span></span>
               {product.brand && <span>Brand: <span className="font-medium text-surface-700">{product.brand}</span></span>}
+              <span>Type: <Badge variant={product.productType === 'RAW_MATERIAL' ? 'warning' : 'primary'}>{product.productType === 'RAW_MATERIAL' ? 'Raw Material' : 'Finished Product'}</Badge></span>
             </div>
           </div>
         </div>

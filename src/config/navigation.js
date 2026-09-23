@@ -15,6 +15,8 @@ import {
   Bell,
   ScrollText,
   Settings,
+  Factory,
+  Layers,
 } from 'lucide-react';
 
 /**
@@ -37,12 +39,14 @@ export const NAV_SECTIONS = [
       { id: 'products', label: 'Products', icon: Package, path: '/products' },
       { id: 'categories', label: 'Categories', icon: FolderTree, path: '/categories' },
       { id: 'stock-overview', label: 'Stock Overview', icon: Warehouse, path: '/stock-overview' },
+      { id: 'boms', label: 'Bill of Materials', icon: Layers, path: '/boms' },
     ],
   },
   {
     id: 'operations',
     label: 'Operations',
     items: [
+      { id: 'manufacturing', label: 'Manufacturing', icon: Factory, path: '/manufacturing' },
       { id: 'stock-receiving', label: 'Stock Receiving', icon: PackagePlus, path: '/stock-receiving' },
       { id: 'stock-transfers', label: 'Stock Transfers', icon: ArrowLeftRight, path: '/stock-transfers' },
       { id: 'adjustments', label: 'Adjustments', icon: ClipboardEdit, path: '/adjustments' },

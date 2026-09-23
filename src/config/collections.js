@@ -16,5 +16,7 @@ export const COLLECTIONS = {
   AUDIT_LOGS: 'audit_logs',
   CUSTOMERS: 'customers',
   INVOICES: 'invoices',
-  SALES_RETURNS: 'sales_returns'
+  SALES_RETURNS: 'sales_returns',
+  BOMS: 'boms',
+  PRODUCTIONS: 'productions'
 };

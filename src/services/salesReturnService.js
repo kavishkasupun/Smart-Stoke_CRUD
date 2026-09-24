@@ -80,18 +80,32 @@ export const processSalesReturn = async (invoiceId, returnData, userProfile) => 
       throw new Error(`Cannot return ${returnQuantity}. Only ${maxReturnable} left to return.`);
     }
 
-    // 3. Read Variant Document
-    const variantRef = doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId);
-    const variantSnap = await transaction.get(variantRef);
-
-    if (!variantSnap.exists()) {
-      throw new Error(`Variant ${item.variantName} no longer exists in database.`);
+    // 3. Read Stock Document (Variant or Product)
+    let stockDocRef;
+    let stockDocSnap;
+    let stockData;
+    let baseProductId = item.productId;
+    
+    if (item.variantId) {
+      stockDocRef = doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId);
+      stockDocSnap = await transaction.get(stockDocRef);
+      if (!stockDocSnap.exists()) {
+        throw new Error(`Variant ${item.variantName} no longer exists in database.`);
+      }
+      stockData = stockDocSnap.data();
+      baseProductId = stockData.productId;
+    } else {
+      stockDocRef = doc(db, COLLECTIONS.PRODUCTS, item.productId);
+      stockDocSnap = await transaction.get(stockDocRef);
+      if (!stockDocSnap.exists()) {
+        throw new Error(`Product ${item.productName} no longer exists in database.`);
+      }
+      stockData = stockDocSnap.data();
     }
 
-    const variantData = variantSnap.data();
     const branch = invoiceData.branch;
-    const currentStock = variantData.stock?.[branch] || 0;
-    const currentOverall = variantData.stock?.overall || 0;
+    const currentStock = stockData.stock?.[branch] || 0;
+    const currentOverall = stockData.stock?.overall || 0;
 
     // 4. Calculate new values
     const newReturnedQty = previouslyReturnedQty + returnQuantity;
@@ -100,8 +114,8 @@ export const processSalesReturn = async (invoiceId, returnData, userProfile) => 
 
     // 5. Writes
     
-    // 5.1 Update Variant Stock
-    transaction.update(variantRef, {
+    // 5.1 Update Stock Document
+    transaction.update(stockDocRef, {
       [`stock.${branch}`]: newBranchStock,
       'stock.overall': newOverallStock,
       updatedAt: new Date().toISOString(),
@@ -149,10 +163,10 @@ export const processSalesReturn = async (invoiceId, returnData, userProfile) => 
       type: 'SALE_RETURN',
       referenceId: returnRef.id,
       referenceNumber: returnNumber,
-      productId: variantData.productId,
-      productName: variantData.name,
-      variantId: item.variantId,
-      variantName: item.variantName,
+      productId: baseProductId,
+      productName: stockData.name || item.productName,
+      variantId: item.variantId || null,
+      variantName: item.variantName || null,
       branch: invoiceData.branch,
       quantity: returnQuantity, // Positive for restocking
       beforeQuantity: currentStock,

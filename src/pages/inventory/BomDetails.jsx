@@ -22,7 +22,8 @@ export default function BomDetails() {
   
   const [finishedProduct, setFinishedProduct] = useState(null);
   const [finishedVariant, setFinishedVariant] = useState(null);
-  const [rawMaterials, setRawMaterials] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
+  const [allVariants, setAllVariants] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -40,31 +41,21 @@ export default function BomDetails() {
       }
       setBom(currentBom);
 
-      const [allProducts, allVariants, bomHistory] = await Promise.all([
+      const [allProductsData, allVariantsData, bomHistory] = await Promise.all([
         getProducts(),
         getProductVariants(),
-        getBomHistory(currentBom.finishedVariantId)
+        getBomHistory(currentBom.finishedProductId, currentBom.finishedVariantId)
       ]);
       
       setHistory(bomHistory);
 
-      const variant = allVariants.find(v => v.id === currentBom.finishedVariantId);
-      const product = allProducts.find(p => p.id === currentBom.finishedProductId);
+      const variant = allVariantsData.find(v => v.id === currentBom.finishedVariantId);
+      const product = allProductsData.find(p => p.id === currentBom.finishedProductId);
       
       setFinishedVariant(variant);
       setFinishedProduct(product);
-
-      // Build dictionary of raw materials
-      const rawGoods = allProducts.filter(p => p.productType === 'RAW_MATERIAL');
-      const rawVariants = allVariants.filter(v => rawGoods.some(p => p.id === v.productId));
-      const enrichedRawMaterials = rawVariants.map(v => {
-        const p = rawGoods.find(pr => pr.id === v.productId);
-        return {
-          ...v,
-          productName: p?.name || 'Unknown'
-        };
-      });
-      setRawMaterials(enrichedRawMaterials);
+      setAllProducts(allProductsData);
+      setAllVariants(allVariantsData);
 
     } catch (error) {
       console.error(error);
@@ -77,27 +68,41 @@ export default function BomDetails() {
   if (loading) return <div className="p-12 text-center text-surface-500">Loading BOM details...</div>;
   if (!bom) return null;
 
-  const getMaterialLabel = (variantId) => {
-    const rm = rawMaterials.find(r => r.id === variantId);
-    if (!rm) return 'Unknown Material';
-    return `${rm.productName} ${rm.size ? `(${rm.size})` : ''}`;
+  const getMaterialLabel = (row) => {
+    if (row.variantId) {
+      const v = allVariants.find(v => v.id === row.variantId);
+      const p = allProducts.find(p => p.id === (v?.productId || row.productId));
+      if (v && p) return `${p.name} ${v.name} ${v.size ? `(${v.size})` : ''}`;
+    }
+    if (row.productId) {
+      const p = allProducts.find(p => p.id === row.productId);
+      if (p) return p.name;
+    }
+    return 'Unknown Material';
   };
 
-  const getMaterialSku = (variantId) => {
-    const rm = rawMaterials.find(r => r.id === variantId);
-    return rm?.sku || 'N/A';
+  const getMaterialSku = (row) => {
+    if (row.variantId) {
+      const v = allVariants.find(v => v.id === row.variantId);
+      return v?.sku || 'N/A';
+    }
+    if (row.productId) {
+      const p = allProducts.find(p => p.id === row.productId);
+      return p?.sku || 'N/A';
+    }
+    return 'N/A';
   };
 
   const materialsColumns = [
     {
       header: 'Component',
-      accessor: 'variantId',
-      render: (val) => <span className="font-medium text-surface-900">{getMaterialLabel(val)}</span>
+      accessor: 'id',
+      render: (_, row) => <span className="font-medium text-surface-900">{getMaterialLabel(row)}</span>
     },
     {
       header: 'SKU',
-      accessor: 'variantId',
-      render: (val) => <span className="font-mono text-sm text-surface-500">{getMaterialSku(val)}</span>
+      accessor: 'id',
+      render: (_, row) => <span className="font-mono text-sm text-surface-500">{getMaterialSku(row)}</span>
     },
     {
       header: 'Quantity',

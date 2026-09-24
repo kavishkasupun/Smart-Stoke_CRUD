@@ -12,6 +12,7 @@ export default function InvoiceDetails() {
   const navigate = useNavigate();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showLogo, setShowLogo] = useState(true);
   const printRef = useRef(null);
 
   useEffect(() => {
@@ -76,13 +77,24 @@ export default function InvoiceDetails() {
           </div>
         </div>
         
-        <div className="flex gap-3">
-          <Button variant="outline" icon={<Download className="w-4 h-4" />} onClick={handleDownloadPDF}>
-            Download PDF
-          </Button>
-          <Button variant="primary" icon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
-            Print Document
-          </Button>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-surface-700 cursor-pointer select-none bg-surface-100 px-3 py-2 rounded-lg border border-surface-200 hover:bg-surface-200 transition-colors">
+            <input 
+              type="checkbox" 
+              className="rounded text-primary-600 focus:ring-primary-500 w-4 h-4 cursor-pointer"
+              checked={showLogo}
+              onChange={(e) => setShowLogo(e.target.checked)}
+            />
+            Show Logo
+          </label>
+          <div className="flex gap-3">
+            <Button variant="outline" icon={<Download className="w-4 h-4" />} onClick={handleDownloadPDF}>
+              Download PDF
+            </Button>
+            <Button variant="primary" icon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
+              Print Document
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -96,7 +108,7 @@ export default function InvoiceDetails() {
           {/* We render the print layout here as well, but inside a container */}
           <div className="p-4 bg-surface-200">
             <div className="bg-white shadow-lg mx-auto max-w-3xl overflow-x-auto">
-              <PrintInvoice ref={printRef} invoice={invoice} />
+              <PrintInvoice ref={printRef} invoice={invoice} showLogo={showLogo} />
             </div>
           </div>
         </Card>
@@ -104,7 +116,7 @@ export default function InvoiceDetails() {
 
       {/* Actual Print View (Hidden on screen, visible on print) */}
       <div className="hidden print:block">
-        <PrintInvoice invoice={invoice} />
+        <PrintInvoice invoice={invoice} showLogo={showLogo} />
       </div>
     </div>
   );

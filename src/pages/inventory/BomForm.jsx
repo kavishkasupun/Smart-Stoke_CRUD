@@ -197,6 +197,7 @@ export default function BomForm() {
     }
 
     setSaving(true);
+    toast.showLoading('Saving BOM Version...');
     try {
       const payload = {
         finishedProductId: selectedProduct,
@@ -220,6 +221,7 @@ export default function BomForm() {
       toast.error('Failed to save BOM');
     } finally {
       setSaving(false);
+      toast.hideLoading();
     }
   };
 

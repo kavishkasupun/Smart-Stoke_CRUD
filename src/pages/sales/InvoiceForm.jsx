@@ -96,15 +96,15 @@ export default function InvoiceForm() {
           updated.unitPrice = 0;
           const product = products.find(p => p.id === value);
           if (product && product.hasVariants === false) {
-             updated.unitPrice = product.price || 0;
+             updated.unitPrice = product.sellingPrice || 0;
           }
         }
         
         if (field === 'variantId' && value) {
           const product = products.find(p => p.id === updated.productId);
           const variant = product?.variants?.find(v => v.id === value);
-          if (variant && variant.price) {
-            updated.unitPrice = variant.price;
+          if (variant && variant.sellingPrice) {
+            updated.unitPrice = variant.sellingPrice;
           }
         }
         return updated;
@@ -114,6 +114,20 @@ export default function InvoiceForm() {
   };
 
   // Calculations
+  const getAvailableStock = (productId, variantId) => {
+    if (!selectedBranch || !productId) return null;
+    const product = products.find(p => p.id === productId);
+    if (!product) return null;
+    if (product.hasVariants === false) {
+      return product.stock?.[selectedBranch] || 0;
+    }
+    if (variantId) {
+      const variant = product.variants?.find(v => v.id === variantId);
+      return variant?.stock?.[selectedBranch] || 0;
+    }
+    return null;
+  };
+
   const calculateTotals = () => {
     let subTotal = 0;
     let totalDiscount = 0;
@@ -160,6 +174,11 @@ export default function InvoiceForm() {
 
       if (!item.productId || (hasVariants && !item.variantId)) return toast.error(`Item #${i + 1} is missing product/variant selection.`);
       if (item.quantity <= 0) return toast.error(`Item #${i + 1} must have quantity > 0.`);
+      
+      const availableStock = getAvailableStock(item.productId, item.variantId);
+      if (availableStock !== null && parseFloat(item.quantity) > availableStock) {
+        return toast.error(`Item #${i + 1} quantity (${item.quantity}) exceeds available stock (${availableStock}).`);
+      }
     }
 
     const isConfirmed = await confirm({
@@ -179,15 +198,28 @@ export default function InvoiceForm() {
         const product = products.find(p => p.id === item.productId);
         const variant = product?.variants?.find(v => v.id === item.variantId);
         
+        const qty = parseFloat(item.quantity) || 0;
+        const price = mode === 'PRICE_INCLUDED' ? parseFloat(item.unitPrice) : 0;
+        const discountVal = mode === 'PRICE_INCLUDED' ? parseFloat(item.discountValue) : 0;
+        let lineDisc = 0;
+        if (mode === 'PRICE_INCLUDED') {
+          if (item.discountType === 'PERCENTAGE') {
+            lineDisc = (qty * price) * (discountVal / 100);
+          } else {
+            lineDisc = discountVal;
+          }
+        }
+
         return {
           productId: item.productId,
           productName: product?.name,
           variantId: item.variantId || null,
           variantName: variant ? (variant.name || variant.size) : null,
-          quantity: parseFloat(item.quantity),
-          unitPrice: mode === 'PRICE_INCLUDED' ? parseFloat(item.unitPrice) : 0,
+          quantity: qty,
+          unitPrice: price,
           discountType: mode === 'PRICE_INCLUDED' ? item.discountType : 'NONE',
-          discountValue: mode === 'PRICE_INCLUDED' ? parseFloat(item.discountValue) : 0,
+          discountValue: discountVal,
+          discount: lineDisc,
         };
       });
 
@@ -307,6 +339,7 @@ export default function InvoiceForm() {
             {items.map((item, index) => {
               const product = products.find(p => p.id === item.productId);
               const variants = product?.variants || [];
+              const availableStock = getAvailableStock(item.productId, item.variantId);
               
               return (
                 <div key={item.id} className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative">
@@ -320,8 +353,8 @@ export default function InvoiceForm() {
                     </button>
                   )}
                   
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div className="md:col-span-3 space-y-1">
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div className="flex-[3] min-w-[200px] space-y-1">
                       <label className="block text-xs font-medium text-surface-500">Product *</label>
                       <select
                         required
@@ -335,7 +368,7 @@ export default function InvoiceForm() {
                     </div>
 
                     {product?.hasVariants !== false ? (
-                      <div className="md:col-span-2 space-y-1">
+                      <div className="flex-[2] min-w-[150px] space-y-1">
                         <label className="block text-xs font-medium text-surface-500">Variant/Size *</label>
                         <select
                           required
@@ -353,25 +386,38 @@ export default function InvoiceForm() {
                         </select>
                       </div>
                     ) : (
-                      <div className="md:col-span-2 space-y-1 flex flex-col justify-end pb-2 text-sm text-surface-500 font-medium">
+                      <div className="flex-[2] min-w-[150px] space-y-1 flex flex-col justify-end pb-2 text-sm text-surface-500 font-medium">
                          {selectedBranch ? `(Stock: ${product.stock?.[selectedBranch] || 0})` : ''}
                       </div>
                     )}
 
-                    <div className="md:col-span-1 space-y-1">
-                      <label className="block text-xs font-medium text-surface-500">Qty *</label>
+                    <div className="w-24 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-xs font-medium text-surface-500">Qty *</label>
+                        {!selectedBranch ? (
+                          <span className="text-[10px] text-warning-600 font-bold">Select Branch for Max Stock</span>
+                        ) : availableStock !== null ? (
+                          <span className="text-[10px] text-surface-400 font-bold" title="Available Stock">Max: {availableStock}</span>
+                        ) : null}
+                      </div>
                       <Input
                         type="number"
                         min="1"
+                        max={availableStock !== null ? availableStock : undefined}
                         required
                         value={item.quantity}
-                        onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
+                        onChange={(e) => {
+                           const maxVal = availableStock !== null ? availableStock : Infinity;
+                           let val = e.target.value;
+                           if (Number(val) > maxVal) val = maxVal;
+                           handleItemChange(item.id, 'quantity', val);
+                        }}
                       />
                     </div>
 
                     {mode === 'PRICE_INCLUDED' && (
                       <>
-                        <div className="md:col-span-2 space-y-1">
+                        <div className="flex-[2] min-w-[120px] space-y-1">
                           <label className="block text-xs font-medium text-surface-500">Unit Price</label>
                           <Input
                             type="number"
@@ -383,8 +429,8 @@ export default function InvoiceForm() {
                           />
                         </div>
 
-                        <div className="md:col-span-2 flex gap-2">
-                          <div className="space-y-1 w-1/3">
+                        <div className="flex-[3] min-w-[180px] flex gap-2">
+                          <div className="w-20 space-y-1">
                             <label className="block text-xs font-medium text-surface-500">Type</label>
                             <select
                               className="w-full px-2 py-2 bg-white border border-surface-300 rounded-md text-sm"
@@ -395,7 +441,7 @@ export default function InvoiceForm() {
                               <option value="PERCENTAGE">%</option>
                             </select>
                           </div>
-                          <div className="space-y-1 w-2/3">
+                          <div className="flex-1 space-y-1">
                             <label className="block text-xs font-medium text-surface-500">Discount</label>
                             <Input
                               type="number"
@@ -407,7 +453,7 @@ export default function InvoiceForm() {
                           </div>
                         </div>
 
-                        <div className="md:col-span-2 space-y-1 text-right">
+                        <div className="flex-[2] min-w-[120px] space-y-1 text-right">
                           <label className="block text-xs font-medium text-surface-500">Line Total</label>
                           <div className="h-10 flex items-center justify-end font-bold text-surface-900 bg-white border border-surface-200 px-3 rounded-md">
                             Rs. {((item.quantity * item.unitPrice) - (item.discountType === 'PERCENTAGE' ? (item.quantity * item.unitPrice * (item.discountValue / 100)) : item.discountValue)).toFixed(2)}

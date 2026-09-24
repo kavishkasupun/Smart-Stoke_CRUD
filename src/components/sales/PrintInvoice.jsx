@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
-const PrintInvoice = forwardRef(({ invoice }, ref) => {
+const PrintInvoice = forwardRef(({ invoice, showLogo = true }, ref) => {
   if (!invoice) return null;
 
   const isPriceIncluded = invoice.mode === 'PRICE_INCLUDED';
@@ -12,21 +12,23 @@ const PrintInvoice = forwardRef(({ invoice }, ref) => {
       <div className="flex justify-between items-start border-b-4 border-danger-600 pb-6 mb-8">
         <div>
           {/* Logo & Company Info */}
-          <div className="mb-3">
-            <img 
-              src="/logo.png" 
-              alt="SMART Electronics" 
-              className="h-16 object-contain" 
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextElementSibling.style.display = 'block';
-              }}
-            />
-            <div className="hidden h-16 flex items-center">
-              <span className="text-2xl font-black text-primary-700 tracking-tight">SMART</span>
-              <span className="text-2xl font-bold text-surface-600 tracking-tight ml-1">Electronics</span>
+          {showLogo && (
+            <div className="mb-3">
+              <img 
+                src="/logo.png" 
+                alt="SMART Electronics" 
+                className="h-16 object-contain" 
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextElementSibling.style.display = 'flex';
+                }}
+              />
+              <div className="hidden h-16 items-center">
+                <span className="text-2xl font-black text-primary-700 tracking-tight">SMART</span>
+                <span className="text-2xl font-bold text-surface-600 tracking-tight ml-1">Electronics</span>
+              </div>
             </div>
-          </div>
+          )}
           <div className="text-sm text-surface-600 space-y-1">
             <p>123 Business Road, Suite 100</p>
             <p>Colombo, Sri Lanka</p>
@@ -47,8 +49,8 @@ const PrintInvoice = forwardRef(({ invoice }, ref) => {
       </div>
 
       {/* Customer & Info Section */}
-      <div className="grid grid-cols-2 gap-8 mb-8">
-        <div className="bg-surface-50 p-4 rounded-lg border border-surface-100">
+      <div className="mb-8">
+        <div className="bg-surface-50 p-4 rounded-lg border border-surface-100 max-w-sm">
           <h3 className="text-xs font-bold text-danger-600 uppercase tracking-wider mb-2">Billed To</h3>
           <p className="text-lg font-bold text-surface-800">{invoice.customerName}</p>
           {invoice.customerId ? (
@@ -57,15 +59,6 @@ const PrintInvoice = forwardRef(({ invoice }, ref) => {
             <p className="text-sm text-surface-500 mt-1">Walk-in Customer</p>
           )}
         </div>
-        
-        {!isPriceIncluded && (
-          <div className="bg-warning-50 p-4 rounded-lg border border-warning-200 flex items-center">
-            <p className="text-warning-800 text-sm font-medium">
-              <span className="font-bold text-warning-900 block mb-1">Notice:</span>
-              This document is a dispatch note. Financial values (prices, discounts, and totals) were not specified at the time of creation.
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Items Table */}

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Box } from 'lucide-react';
 import { Card, Table, Badge, Input, Spinner } from '../../components/ui';
 import { getProductVariants, getProducts } from '../../services/productService';
+import { getCategories } from '../../services/categoryService';
 
 export default function StockOverview() {
   const [variants, setVariants] = useState([]);
@@ -11,6 +12,8 @@ export default function StockOverview() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedProductType, setSelectedProductType] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -19,11 +22,14 @@ export default function StockOverview() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [variantsData, productsData] = await Promise.all([
+      const [variantsData, productsData, categoriesData] = await Promise.all([
         getProductVariants(), 
-        getProducts()
+        getProducts(),
+        getCategories()
       ]);
       
+      setCategories(categoriesData);
+
       const nonVariantProducts = productsData.filter(p => p.hasVariants === false).map(p => ({
         id: p.id,
         productId: p.id,
@@ -32,10 +38,21 @@ export default function StockOverview() {
         stock: p.stock,
         reorderLevel: p.reorderLevel,
         active: p.active,
-        size: ''
+        size: '',
+        categoryId: p.categoryId,
+        productType: p.productType
       }));
 
-      setVariants([...variantsData, ...nonVariantProducts]);
+      const enrichedVariants = variantsData.map(v => {
+        const product = productsData.find(p => p.id === v.productId);
+        return {
+          ...v,
+          categoryId: product?.categoryId,
+          productType: product?.productType
+        };
+      });
+
+      setVariants([...enrichedVariants, ...nonVariantProducts]);
     } catch (error) {
       console.error('Failed to load stock overview data:', error);
     } finally {
@@ -57,13 +74,22 @@ export default function StockOverview() {
     return <Badge variant="success">Normal</Badge>;
   };
 
+  const categoryMap = useMemo(() => {
+    return categories.reduce((acc, cat) => {
+      acc[cat.id] = cat.name;
+      return acc;
+    }, {});
+  }, [categories]);
+
   const filteredVariants = variants.filter(variant => {
     const matchesSearch = variant?.name?.toLowerCase()?.includes(searchTerm.toLowerCase()) || 
                           variant?.sku?.toLowerCase()?.includes(searchTerm.toLowerCase()) || false;
     const status = getStatus(variant);
     const matchesStatus = selectedStatus ? status === selectedStatus : true;
+    const matchesCategory = selectedCategory ? variant.categoryId === selectedCategory : true;
+    const matchesType = selectedProductType ? variant.productType === selectedProductType : true;
     
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesCategory && matchesType;
   });
 
   const columns = [
@@ -76,6 +102,24 @@ export default function StockOverview() {
           {row.size && <div className="text-xs text-surface-500">Size: {row.size}</div>}
           <div className="text-xs text-surface-400 font-mono mt-0.5">SKU: {row.sku || 'N/A'}</div>
         </div>
+      )
+    },
+    { 
+      header: 'Category', 
+      accessor: 'categoryId',
+      render: (val) => (
+        <Badge variant="surface">
+          {categoryMap[val] || 'Unknown'}
+        </Badge>
+      )
+    },
+    {
+      header: 'Type',
+      accessor: 'productType',
+      render: (val) => (
+        <Badge variant={val === 'RAW_MATERIAL' ? 'warning' : 'primary'}>
+          {val === 'RAW_MATERIAL' ? 'Raw Material' : 'Finished Product'}
+        </Badge>
       )
     },
     { 
@@ -125,7 +169,7 @@ export default function StockOverview() {
             />
           </div>
           
-          <div className="w-full md:w-64 relative flex items-center">
+          <div className="w-full md:w-48 relative flex items-center">
             <Filter className="w-4 h-4 absolute left-3 text-surface-400 pointer-events-none" />
             <select
               value={selectedStatus}
@@ -136,6 +180,33 @@ export default function StockOverview() {
               <option value="normal">Normal</option>
               <option value="low_stock">Low Stock</option>
               <option value="out_of_stock">Out of Stock</option>
+            </select>
+          </div>
+          
+          <div className="w-full md:w-48 relative flex items-center">
+            <Filter className="w-4 h-4 absolute left-3 text-surface-400 pointer-events-none" />
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow appearance-none"
+            >
+              <option value="">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="w-full md:w-48 relative flex items-center">
+            <Filter className="w-4 h-4 absolute left-3 text-surface-400 pointer-events-none" />
+            <select
+              value={selectedProductType}
+              onChange={(e) => setSelectedProductType(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow appearance-none"
+            >
+              <option value="">All Types</option>
+              <option value="FINISHED_PRODUCT">Finished Products</option>
+              <option value="RAW_MATERIAL">Raw Materials</option>
             </select>
           </div>
         </div>

@@ -19,7 +19,7 @@ const RETURN_REASONS = [
 export default function CreateReturnForm() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const { toast } = useToast();
+  const toast = useToast();
   const confirm = useConfirm();
 
   const [loading, setLoading] = useState(false);
@@ -100,9 +100,10 @@ export default function CreateReturnForm() {
       return toast.error('Please select a reason for the return.');
     }
 
+    const itemName = item.variantName ? `${item.productName} (${item.variantName})` : item.productName;
     const isConfirmed = await confirm({
       title: 'Confirm Sales Return',
-      message: `Are you sure you want to return ${qty}x ${item.variantName} to ${selectedInvoice.branch} branch? This will increase branch stock.`,
+      message: `Are you sure you want to return ${qty}x ${itemName} to ${selectedInvoice.branch} branch? This will increase branch stock.`,
       confirmText: 'Process Return',
       type: 'warning'
     });

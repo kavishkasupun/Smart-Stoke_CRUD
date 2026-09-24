@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useRef } from 'react';
 import html2pdf from 'html2pdf.js';
 import { ArrowLeft, Factory, FileText, CheckCircle2, Clock, Download } from 'lucide-react';
-import { Card, Button, Badge } from '../../components/ui';
+import { Card, Button, Badge, Modal, Input } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProductionOrderById, confirmProductionOrder, cancelProductionOrder } from '../../services/productionService';
 import { getProducts, getProductVariants } from '../../services/productService';
@@ -21,6 +21,8 @@ export default function ProductionDetails() {
   const [confirming, setConfirming] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [order, setOrder] = useState(null);
+  const [showYieldModal, setShowYieldModal] = useState(false);
+  const [actualYield, setActualYield] = useState('');
   const contentRef = useRef(null);
   
   const handleDownloadPDF = () => {
@@ -90,20 +92,29 @@ export default function ProductionDetails() {
     }
   };
 
-  const handleConfirm = async () => {
-    const isConfirmed = await confirm({
-      title: 'Confirm Production',
-      message: 'Are you sure you want to confirm this production run? This will permanently deduct raw materials and add finished stock.',
-      confirmText: 'Confirm & Deduct',
-      type: 'warning'
-    });
+  const handleConfirm = () => {
+    setActualYield(order.quantityProduced.toString());
+    setShowYieldModal(true);
+  };
 
-    if (!isConfirmed) return;
+  const executeConfirm = async () => {
+    const yieldValue = Number(actualYield);
+    if (isNaN(yieldValue) || yieldValue < 0) {
+      toast.error('Invalid yield quantity entered.');
+      return;
+    }
+
+    if (yieldValue > order.quantityProduced) {
+      toast.error(`You cannot enter a yield greater than the expected ${order.quantityProduced} units.`);
+      return;
+    }
+
+    setShowYieldModal(false);
     
     setConfirming(true);
     toast.showLoading('Confirming production and deducting stock...');
     try {
-      await confirmProductionOrder(id, userProfile.id);
+      await confirmProductionOrder(id, userProfile.id, yieldValue);
       toast.success('Production confirmed successfully! Stock has been updated.');
       fetchData(); // Reload details to show COMPLETED status
     } catch (error) {
@@ -162,7 +173,7 @@ export default function ProductionDetails() {
             </div>
             <p className="text-sm text-surface-500 mt-1 flex items-center gap-2">
               <Clock className="w-4 h-4" /> 
-              Created: {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
+              Created: {order.createdAt ? (order.createdAt.toDate ? order.createdAt.toDate().toLocaleString() : new Date(order.createdAt).toLocaleString()) : 'N/A'}
             </p>
           </div>
         </div>
@@ -283,6 +294,37 @@ export default function ProductionDetails() {
 
       </div>
       </div>
+      {/* Modals and Overlays */}
+      <Modal
+        isOpen={showYieldModal}
+        onClose={() => setShowYieldModal(false)}
+        title="Confirm Actual Yield"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-surface-500">
+            Please enter the actual number of finished goods produced. If there was raw material damage, enter the real finished amount here.
+            <br /><br />
+            <strong>Expected Yield:</strong> {order.quantityProduced} units
+            <br />
+            <strong>Note:</strong> This will permanently deduct raw materials for {order.quantityProduced} units but only add the actual yield to finished stock.
+          </p>
+          <Input
+            type="number"
+            label="Actual Yielded Units"
+            value={actualYield}
+            onChange={(e) => setActualYield(e.target.value)}
+            min="0"
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="secondary" onClick={() => setShowYieldModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={executeConfirm} isLoading={confirming}>
+              Confirm & Deduct Stock
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -45,7 +45,7 @@ export default function OperationsReport() {
   }, []);
 
   useEffect(() => {
-    if (userProfile.branchId && userProfile.branchId !== BRANCHES.GLOBAL) {
+    if (userProfile?.branchId && userProfile.branchId !== 'all') {
       setBranchFilter(userProfile.branchId);
     }
   }, [userProfile]);
@@ -89,7 +89,7 @@ export default function OperationsReport() {
           return false;
         }
       }
-      if (branchFilter && item.branch !== branchFilter) return false;
+      if (branchFilter && item.branch?.toLowerCase() !== branchFilter.toLowerCase()) return false;
       if (typeFilter && item.type !== typeFilter) return false;
       return true;
     });
@@ -102,7 +102,7 @@ export default function OperationsReport() {
         if (!item.referenceId?.toLowerCase().includes(q)) return false;
       }
       // If branch manager, show transfers involving their branch (source or destination)
-      if (branchFilter && item.sourceBranch !== branchFilter && item.destinationBranch !== branchFilter) return false;
+      if (branchFilter && item.sourceBranch?.toLowerCase() !== branchFilter.toLowerCase() && item.destinationBranch?.toLowerCase() !== branchFilter.toLowerCase()) return false;
       if (typeFilter && item.status !== typeFilter) return false; // repurposing typeFilter for Status here
       return true;
     });
@@ -114,7 +114,7 @@ export default function OperationsReport() {
         const q = searchQuery.toLowerCase();
         if (!item.referenceId?.toLowerCase().includes(q)) return false;
       }
-      if (branchFilter && item.branch !== branchFilter) return false;
+      if (branchFilter && item.branch?.toLowerCase() !== branchFilter.toLowerCase()) return false;
       if (typeFilter && item.type !== typeFilter) return false;
       return true;
     });
@@ -126,7 +126,18 @@ export default function OperationsReport() {
     { header: 'Branch', accessor: 'branch', render: (val) => <Badge variant="info">{val}</Badge> },
     { header: 'Type', accessor: 'type', render: (val) => <Badge variant="secondary">{val}</Badge> },
     { header: 'Product', accessor: 'variantName', render: (val, row) => <span className="text-sm font-medium">{row.productName} {val ? <span className="text-surface-500 font-normal">- {val}</span> : ''}</span> },
-    { header: 'Qty', accessor: 'quantity', render: (val) => <span className={`font-bold ${val < 0 ? 'text-danger-600' : 'text-success-600'}`}>{val > 0 ? `+${val}` : val}</span> },
+    { 
+      header: 'Qty', 
+      accessor: 'quantity', 
+      render: (val, row) => {
+        let displayVal = val;
+        const type = row.type || row.movementType;
+        if ((type === 'PRODUCTION_MATERIAL_CONSUMPTION' || type === 'PRODUCTION_MATERIAL_DAMAGE' || type === 'SALE' || type === 'TRANSFER_OUT' || type === 'ADJUSTMENT_OUT') && val > 0) {
+          displayVal = -val;
+        }
+        return <span className={`font-bold ${displayVal < 0 ? 'text-danger-600' : 'text-success-600'}`}>{displayVal > 0 ? `+${displayVal}` : displayVal}</span>;
+      }
+    },
     { header: 'Before', accessor: 'beforeQuantity' },
     { header: 'After', accessor: 'afterQuantity' },
     { header: 'Notes', accessor: 'notes', render: (val) => <span className="text-xs text-surface-500 truncate max-w-xs block">{val || '—'}</span> }
@@ -272,7 +283,7 @@ export default function OperationsReport() {
           <Select 
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            disabled={userProfile.branchId !== BRANCHES.GLOBAL}
+            disabled={userProfile?.branchId !== 'all'}
           >
             <option value="">All Branches</option>
             <option value="Mabola">Mabola</option>

@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye } from 'lucide-react';
-import { Card, Button, Input, Table, Badge, Spinner } from '../../components/ui';
+import { Plus, Search, Eye, Calendar } from 'lucide-react';
+import { Card, Button, Input, Table, Badge, Spinner, Select, DateRangePicker } from '../../components/ui';
 import { getSalesReturns } from '../../services/salesReturnService';
 import { formatDate } from '../../utils/formatters';
+import { subDays, subWeeks, subMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 
 export default function SalesReturns() {
   const navigate = useNavigate();
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const [dateRangePreset, setDateRangePreset] = useState('this-month');
+  const [startDate, setStartDate] = useState(startOfMonth(new Date()));
+  const [endDate, setEndDate] = useState(endOfMonth(new Date()));
 
   useEffect(() => {
     fetchReturns();
@@ -27,12 +32,70 @@ export default function SalesReturns() {
     }
   };
 
-  const filteredReturns = returns.filter(ret => 
-    ret.returnNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ret.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ret.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ret.branch?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleDatePresetChange = (preset) => {
+    setDateRangePreset(preset);
+    const now = new Date();
+    switch (preset) {
+      case 'today':
+        setStartDate(now);
+        setEndDate(now);
+        break;
+      case 'yesterday':
+        setStartDate(subDays(now, 1));
+        setEndDate(subDays(now, 1));
+        break;
+      case 'this-week':
+        setStartDate(startOfWeek(now, { weekStartsOn: 1 }));
+        setEndDate(endOfWeek(now, { weekStartsOn: 1 }));
+        break;
+      case 'last-week':
+        setStartDate(startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 }));
+        setEndDate(endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 }));
+        break;
+      case 'this-month':
+        setStartDate(startOfMonth(now));
+        setEndDate(endOfMonth(now));
+        break;
+      case 'last-month':
+        setStartDate(startOfMonth(subMonths(now, 1)));
+        setEndDate(endOfMonth(subMonths(now, 1)));
+        break;
+      case 'all-time':
+        setStartDate(null);
+        setEndDate(null);
+        break;
+      case 'custom':
+        break;
+      default:
+        break;
+    }
+  };
+
+  const filteredReturns = returns.filter(ret => {
+    const matchesSearch = 
+      ret.returnNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ret.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ret.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ret.branch?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Normalize date
+    const retDate = ret.createdAt?.toDate ? ret.createdAt.toDate() : new Date(ret.createdAt);
+    const retTime = retDate.getTime();
+
+    let matchesDate = true;
+    if (startDate) {
+      const s = new Date(startDate);
+      s.setHours(0, 0, 0, 0);
+      if (retTime < s.getTime()) matchesDate = false;
+    }
+    if (endDate) {
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59, 999);
+      if (retTime > e.getTime()) matchesDate = false;
+    }
+
+    return matchesSearch && matchesDate;
+  });
 
   const columns = [
     { 
@@ -111,15 +174,44 @@ export default function SalesReturns() {
 
       <Card>
         <div className="p-4 border-b border-slate-200">
-          <div className="relative max-w-md">
+          <div className="relative max-w-md w-full">
             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <Input 
               placeholder="Search returns..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 w-full"
             />
           </div>
+        </div>
+
+        <div className="px-4 py-3 bg-surface-50 border-b border-surface-200 flex flex-col sm:flex-row items-center gap-3">
+          <Calendar className="w-4 h-4 text-surface-500 hidden sm:block" />
+          <Select 
+            value={dateRangePreset} 
+            onChange={(e) => handleDatePresetChange(e.target.value)} 
+            className="w-full sm:w-48 text-sm bg-white"
+          >
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="this-week">This Week</option>
+            <option value="last-week">Last Week</option>
+            <option value="this-month">This Month</option>
+            <option value="last-month">Last Month</option>
+            <option value="all-time">All Time</option>
+            <option value="custom">Custom Range</option>
+          </Select>
+          
+          {dateRangePreset === 'custom' && (
+            <div className="w-full sm:w-auto">
+              <DateRangePicker 
+                startDate={startDate}
+                endDate={endDate}
+                onStartChange={setStartDate}
+                onEndChange={setEndDate}
+              />
+            </div>
+          )}
         </div>
         
         {loading ? (

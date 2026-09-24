@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { getProducts, getProductVariants } from '../../services/productService';
 import { processStockReceive } from '../../services/stockReceiveService';
+import { generateReferenceNumber } from '../../services/dbHelpers';
 import { BRANCHES } from '../../config/constants';
 
 export default function ReceiveStockForm() {
@@ -22,7 +23,7 @@ export default function ReceiveStockForm() {
 
   // Form State
   const [receiveData, setReceiveData] = useState({
-    referenceId: '',
+    referenceId: generateReferenceNumber('IMP'),
     supplier: '',
     importDate: new Date().toISOString().split('T')[0],
     destinationBranch: '',

@@ -54,7 +54,12 @@ export const getProductStockHistory = async (productId, variantId, branchId, sta
     // Aggregate before start date to find opening stock
     const priorMovements = allMovements.filter(m => m.timestamp < start.getTime());
     priorMovements.forEach(m => {
-      openingStock += Number(m.quantity || 0);
+      let qty = Number(m.quantity || 0);
+      const type = m.type || m.movementType;
+      if (type === 'PRODUCTION_MATERIAL_CONSUMPTION' || type === 'PRODUCTION_MATERIAL_DAMAGE' || type === 'SALE' || type === 'TRANSFER_OUT') {
+        qty = -Math.abs(qty);
+      }
+      openingStock += qty;
     });
 
     // Movements within the date range
@@ -85,15 +90,22 @@ export const getProductStockHistory = async (productId, variantId, branchId, sta
       else if (type === 'TRANSFER_IN') summary.transferredIn += qty;
       else if (type === 'TRANSFER_OUT') summary.transferredOut += Math.abs(qty);
       else if (type === 'PRODUCTION_FINISHED_RECEIPT') summary.produced += qty;
-      else if (type === 'PRODUCTION_MATERIAL_CONSUMPTION') summary.consumed += Math.abs(qty);
+      else if (type === 'PRODUCTION_MATERIAL_CONSUMPTION' || type === 'PRODUCTION_MATERIAL_DAMAGE') summary.consumed += Math.abs(qty);
       else if (type === 'ADJUSTMENT' || type === 'STOCK_ADJUSTMENT') summary.adjusted += qty;
       else if (type === 'SALE_RETURN') summary.returned += qty;
       
+      // Force deduction types to be negative in case they were stored as positive due to older bugs
+      let effectiveQty = qty;
+      if (type === 'PRODUCTION_MATERIAL_CONSUMPTION' || type === 'PRODUCTION_MATERIAL_DAMAGE' || type === 'SALE' || type === 'TRANSFER_OUT') {
+        effectiveQty = -Math.abs(qty);
+      }
+
       const prevBal = runningBalance;
-      runningBalance += qty;
+      runningBalance += effectiveQty;
 
       return {
         ...m,
+        quantity: effectiveQty, // Ensure UI gets the negative sign
         computedBefore: prevBal,
         computedAfter: runningBalance
       };
@@ -133,7 +145,15 @@ export const getProductStockHistory = async (productId, variantId, branchId, sta
         if (matchesProduct && matchesVariant) {
           const qty = Number(item.quantity || 0);
           const price = Number(item.unitPrice || 0);
-          const discount = Number(item.discount || 0);
+          let discount = Number(item.discount || 0);
+          
+          if (item.discount === undefined && item.discountValue) {
+            if (item.discountType === 'PERCENTAGE') {
+              discount = (qty * price) * (Number(item.discountValue) / 100);
+            } else {
+              discount = Number(item.discountValue);
+            }
+          }
           
           totalUnitsSold += qty;
           totalSalesValue += (qty * price) - discount;

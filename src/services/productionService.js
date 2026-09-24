@@ -138,7 +138,7 @@ export const cancelProductionOrder = async (orderId, userId) => {
  * Confirms a DRAFT Production Order.
  * Executes a transaction to deduct raw materials and add finished goods.
  */
-export const confirmProductionOrder = async (orderId, userId) => {
+export const confirmProductionOrder = async (orderId, userId, actualYield = null) => {
   try {
     const orderRef = doc(db, COLLECTIONS.PRODUCTIONS, orderId);
     
@@ -179,6 +179,8 @@ export const confirmProductionOrder = async (orderId, userId) => {
       const consumedLog = [];
 
       // 3. Validate and calculate raw material deductions
+      const finalYield = actualYield !== null && actualYield !== undefined ? Number(actualYield) : quantityProduced;
+
       for (let i = 0; i < materialsRequired.length; i++) {
         const req = materialsRequired[i];
         const snap = materialSnaps[i];
@@ -206,22 +208,43 @@ export const confirmProductionOrder = async (orderId, userId) => {
           }
         });
 
-        movements.push({
-          type: 'PRODUCTION_MATERIAL_CONSUMPTION',
-          referenceId,
-          productId: req.productId || matData.productId, // req.productId added above
-          variantId: req.variantId || null,
-          branch,
-          quantity: deductQty,
-          beforeQuantity: beforeQty,
-          afterQuantity: afterQty,
-          reason: 'Production Consumption'
-        });
+        const validConsumptionQty = Math.min(req.quantityPerUnit * finalYield, deductQty);
+        const wastageQty = deductQty - validConsumptionQty;
+
+        if (validConsumptionQty > 0) {
+          movements.push({
+            type: 'PRODUCTION_MATERIAL_CONSUMPTION',
+            referenceId,
+            productId: req.productId || matData.productId,
+            variantId: req.variantId || null,
+            branch,
+            quantity: validConsumptionQty,
+            beforeQuantity: beforeQty,
+            afterQuantity: beforeQty - validConsumptionQty,
+            reason: 'Production Consumption'
+          });
+        }
+
+        if (wastageQty > 0) {
+          movements.push({
+            type: 'PRODUCTION_MATERIAL_DAMAGE',
+            referenceId,
+            productId: req.productId || matData.productId,
+            variantId: req.variantId || null,
+            branch,
+            quantity: wastageQty,
+            beforeQuantity: beforeQty - validConsumptionQty,
+            afterQuantity: afterQty,
+            reason: 'Production Material Damage'
+          });
+        }
 
         consumedLog.push({
           productId: req.productId || matData.productId,
           variantId: req.variantId || null,
           quantityConsumed: deductQty,
+          quantityValid: validConsumptionQty,
+          quantityDamaged: wastageQty,
           beforeQuantity: beforeQty,
           afterQuantity: afterQty
         });
@@ -230,14 +253,14 @@ export const confirmProductionOrder = async (orderId, userId) => {
       // 4. Calculate finished product addition
       const currentFinishedStock = finishedData.stock || { mabola: 0, jaffna: 0, overall: 0 };
       const finishedBeforeQty = currentFinishedStock[branchKey] || 0;
-      const finishedAfterQty = finishedBeforeQty + quantityProduced;
+      const finishedAfterQty = finishedBeforeQty + finalYield;
 
       updates.push({
         ref: finishedStockRef,
         stock: {
           ...currentFinishedStock,
           [branchKey]: finishedAfterQty,
-          overall: (currentFinishedStock.overall || 0) + quantityProduced
+          overall: (currentFinishedStock.overall || 0) + finalYield
         }
       });
 
@@ -247,7 +270,7 @@ export const confirmProductionOrder = async (orderId, userId) => {
         productId: finishedProductId,
         variantId: finishedVariantId || null,
         branch,
-        quantity: quantityProduced,
+        quantity: finalYield,
         beforeQuantity: finishedBeforeQty,
         afterQuantity: finishedAfterQty,
         reason: 'Production Finished Goods'
@@ -268,6 +291,8 @@ export const confirmProductionOrder = async (orderId, userId) => {
         status: 'COMPLETED',
         completedAt: new Date().toISOString(),
         completedBy: userId,
+        actualQuantityProduced: finalYield,
+        damagedQuantity: quantityProduced - finalYield,
         consumptionLog: consumedLog
       });
     });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
-import { Card, Button, Input } from '../../components/ui';
+import { Card, Button, Input, Spinner } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProductById, addProduct, updateProduct } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
@@ -21,7 +21,7 @@ export default function ProductForm() {
     brand: '',
     description: '',
     productType: 'FINISHED_PRODUCT',
-    hasVariants: true,
+    hasVariants: false,
     sku: '',
     barcode: '',
     costPrice: '',
@@ -128,7 +128,11 @@ export default function ProductForm() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-surface-500">Loading product...</div>;
+    return (
+      <div className="flex justify-center p-12">
+        <Spinner size="lg" />
+      </div>
+    );
   }
 
   return (

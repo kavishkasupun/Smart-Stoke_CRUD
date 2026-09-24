@@ -26,7 +26,7 @@ export default function ProductStockHistory() {
   // Filters
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedVariantId, setSelectedVariantId] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState(userProfile.branchId !== BRANCHES.GLOBAL ? userProfile.branchId : 'all');
+  const [selectedBranch, setSelectedBranch] = useState(userProfile?.branchId !== 'all' ? userProfile.branchId : 'all');
   
   // Dates
   const [dateRangePreset, setDateRangePreset] = useState('this-month');
@@ -154,7 +154,12 @@ export default function ProductStockHistory() {
       margin: [10, 10, 10, 10],
       filename: `stock_history_${selectedProduct?.name || 'export'}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { 
+        scale: 2, 
+        useCORS: true,
+        windowWidth: 1200,
+        width: 1200
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
     };
 
@@ -201,6 +206,10 @@ export default function ProductStockHistory() {
         else if (t?.includes('ADJUSTMENT')) {
           color = 'warning';
           icon = <ArrowLeftRight className="w-3 h-3 mr-1 inline" />;
+        }
+        else if (t?.includes('DAMAGE') || t?.includes('WASTAGE')) {
+          color = 'danger';
+          icon = <ArrowUpFromLine className="w-3 h-3 mr-1 inline" />;
         }
         
         return (
@@ -315,7 +324,7 @@ export default function ProductStockHistory() {
             <Select 
               value={selectedBranch} 
               onChange={(e) => setSelectedBranch(e.target.value)}
-              disabled={userProfile.branchId !== BRANCHES.GLOBAL}
+              disabled={userProfile?.branchId !== 'all'}
             >
               <option value="all">All Branches</option>
               <option value="mabola">Mabola</option>

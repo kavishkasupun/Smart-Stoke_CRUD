@@ -182,6 +182,11 @@ export const TransactionDetailsModal = ({
                       {transactionType === 'SALE' ? (
                         (data.items || []).map((item, idx) => {
                           const isHighlighted = item.productId === highlightProductId && (!highlightVariantId || item.variantId === highlightVariantId);
+                          const itemDisc = item.discount !== undefined ? item.discount : (
+                            item.discountType === 'PERCENTAGE' 
+                              ? (item.quantity * item.unitPrice) * (Number(item.discountValue) / 100)
+                              : Number(item.discountValue || 0)
+                          );
                           return (
                             <tr key={idx} className={isHighlighted ? 'bg-warning-50' : 'hover:bg-surface-50/50'}>
                               <td className="px-4 py-3">
@@ -191,9 +196,9 @@ export const TransactionDetailsModal = ({
                               </td>
                               <td className="px-4 py-3 text-right font-medium">{item.quantity}</td>
                               <td className="px-4 py-3 text-right text-surface-600">{formatCurrency(item.unitPrice)}</td>
-                              <td className="px-4 py-3 text-right text-surface-600">{formatCurrency(item.discount || 0)}</td>
+                              <td className="px-4 py-3 text-right text-surface-600">{formatCurrency(itemDisc)}</td>
                               <td className="px-4 py-3 text-right font-bold text-surface-900">
-                                {formatCurrency((item.quantity * item.unitPrice) - (item.discount || 0))}
+                                {formatCurrency((item.quantity * item.unitPrice) - itemDisc)}
                               </td>
                             </tr>
                           );

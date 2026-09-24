@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Eye, Filter, Trash2, Edit2 } from 'lucide-react';
-import { Card, Table, Button, Input, Badge } from '../../components/ui';
+import { Card, Table, Button, Input, Badge, Spinner } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { canManageInventory } from '../../utils/permissions';
 import { getProducts, deleteProduct } from '../../services/productService';
@@ -220,12 +220,17 @@ export default function Products() {
         </div>
         
         {/* Data Table */}
-        <Table 
-          columns={columns}
-          data={filteredProducts}
-          isLoading={loading}
-          emptyMessage="No products found matching your filters."
-        />
+        {loading ? (
+          <div className="flex justify-center items-center p-12">
+            <Spinner />
+          </div>
+        ) : (
+          <Table 
+            columns={columns}
+            data={filteredProducts}
+            emptyMessage="No products found matching your filters."
+          />
+        )}
       </Card>
     </div>
   );

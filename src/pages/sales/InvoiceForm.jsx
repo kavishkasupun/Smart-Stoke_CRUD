@@ -90,13 +90,17 @@ export default function InvoiceForm() {
     setItems(prev => prev.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
-        // Auto-select first variant if product changes
+        
         if (field === 'productId') {
           updated.variantId = ''; 
           updated.unitPrice = 0;
+          const product = products.find(p => p.id === value);
+          if (product && product.hasVariants === false) {
+             updated.unitPrice = product.price || 0;
+          }
         }
-        // Auto-populate price if variant selected
-        if (field === 'variantId') {
+        
+        if (field === 'variantId' && value) {
           const product = products.find(p => p.id === updated.productId);
           const variant = product?.variants?.find(v => v.id === value);
           if (variant && variant.price) {
@@ -151,7 +155,10 @@ export default function InvoiceForm() {
     // Validate Items
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      if (!item.productId || !item.variantId) return toast.error(`Item #${i + 1} is missing product selection.`);
+      const product = products.find(p => p.id === item.productId);
+      const hasVariants = product ? product.hasVariants !== false : true;
+
+      if (!item.productId || (hasVariants && !item.variantId)) return toast.error(`Item #${i + 1} is missing product/variant selection.`);
       if (item.quantity <= 0) return toast.error(`Item #${i + 1} must have quantity > 0.`);
     }
 
@@ -175,8 +182,8 @@ export default function InvoiceForm() {
         return {
           productId: item.productId,
           productName: product?.name,
-          variantId: item.variantId,
-          variantName: variant?.name || variant?.size,
+          variantId: item.variantId || null,
+          variantName: variant ? (variant.name || variant.size) : null,
           quantity: parseFloat(item.quantity),
           unitPrice: mode === 'PRICE_INCLUDED' ? parseFloat(item.unitPrice) : 0,
           discountType: mode === 'PRICE_INCLUDED' ? item.discountType : 'NONE',
@@ -327,23 +334,29 @@ export default function InvoiceForm() {
                       </select>
                     </div>
 
-                    <div className="md:col-span-2 space-y-1">
-                      <label className="block text-xs font-medium text-surface-500">Variant/Size *</label>
-                      <select
-                        required
-                        className="w-full px-3 py-2 bg-white border border-surface-300 rounded-md text-sm"
-                        value={item.variantId}
-                        onChange={(e) => handleItemChange(item.id, 'variantId', e.target.value)}
-                        disabled={!item.productId}
-                      >
-                        <option value="">Select variant</option>
-                        {variants.map(v => (
-                          <option key={v.id} value={v.id}>
-                            {v.size || v.name} {selectedBranch ? `(Stock: ${v.stock?.[selectedBranch] || 0})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {product?.hasVariants !== false ? (
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="block text-xs font-medium text-surface-500">Variant/Size *</label>
+                        <select
+                          required
+                          className="w-full px-3 py-2 bg-white border border-surface-300 rounded-md text-sm"
+                          value={item.variantId}
+                          onChange={(e) => handleItemChange(item.id, 'variantId', e.target.value)}
+                          disabled={!item.productId}
+                        >
+                          <option value="">Select variant</option>
+                          {variants.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {v.size || v.name} {selectedBranch ? `(Stock: ${v.stock?.[selectedBranch] || 0})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="md:col-span-2 space-y-1 flex flex-col justify-end pb-2 text-sm text-surface-500 font-medium">
+                         {selectedBranch ? `(Stock: ${product.stock?.[selectedBranch] || 0})` : ''}
+                      </div>
+                    )}
 
                     <div className="md:col-span-1 space-y-1">
                       <label className="block text-xs font-medium text-surface-500">Qty *</label>

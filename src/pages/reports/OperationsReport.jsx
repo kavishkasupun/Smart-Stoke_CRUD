@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, FileText } from 'lucide-react';
 import { Card, Table, Badge, Input, Select, Button, Spinner, DateRangePicker } from '../../components/ui';
 import { getOperationsReportData } from '../../services/reportService';
+import { getProducts, getProductVariants } from '../../services/productService';
+import html2pdf from 'html2pdf.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { BRANCHES } from '../../config/constants';
 import { formatDate } from '../../utils/formatters';
@@ -11,6 +13,10 @@ export default function OperationsReport() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ movements: [], transfers: [], adjustments: [] });
   const [activeTab, setActiveTab] = useState('MOVEMENTS'); // MOVEMENTS, TRANSFERS, ADJUSTMENTS
+  const contentRef = React.useRef(null);
+  
+  const [productsMap, setProductsMap] = useState({});
+  const [variantsMap, setVariantsMap] = useState({});
   
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -22,6 +28,21 @@ export default function OperationsReport() {
   const [branchFilter, setBranchFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const fetchCatalog = async () => {
+      try {
+        const [p, v] = await Promise.all([getProducts(), getProductVariants()]);
+        const pMap = {}; p.forEach(x => pMap[x.id] = x);
+        const vMap = {}; v.forEach(x => vMap[x.id] = x);
+        setProductsMap(pMap);
+        setVariantsMap(vMap);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchCatalog();
+  }, []);
 
   useEffect(() => {
     if (userProfile.branchId && userProfile.branchId !== BRANCHES.GLOBAL) {
@@ -46,8 +67,20 @@ export default function OperationsReport() {
     }
   };
 
+  const enrichedMovements = useMemo(() => {
+    return data.movements.map(m => {
+      const p = productsMap[m.productId];
+      const v = m.variantId ? variantsMap[m.variantId] : null;
+      return {
+        ...m,
+        productName: m.productName || (p ? p.name : 'Unknown Product'),
+        variantName: m.variantName || (v ? (v.name + (v.size ? ` (${v.size})` : '')) : null)
+      };
+    });
+  }, [data.movements, productsMap, variantsMap]);
+
   const filteredMovements = useMemo(() => {
-    return data.movements.filter(item => {
+    return enrichedMovements.filter(item => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         if (!item.referenceNumber?.toLowerCase().includes(q) &&
@@ -60,7 +93,7 @@ export default function OperationsReport() {
       if (typeFilter && item.type !== typeFilter) return false;
       return true;
     });
-  }, [data.movements, searchQuery, branchFilter, typeFilter]);
+  }, [enrichedMovements, searchQuery, branchFilter, typeFilter]);
 
   const filteredTransfers = useMemo(() => {
     return data.transfers.filter(item => {
@@ -92,7 +125,7 @@ export default function OperationsReport() {
     { header: 'Date', accessor: 'createdAt', render: (val) => formatDate(val, { includeTime: true }) },
     { header: 'Branch', accessor: 'branch', render: (val) => <Badge variant="info">{val}</Badge> },
     { header: 'Type', accessor: 'type', render: (val) => <Badge variant="secondary">{val}</Badge> },
-    { header: 'Product', accessor: 'variantName', render: (val, row) => <span className="text-sm">{row.productName} - {val}</span> },
+    { header: 'Product', accessor: 'variantName', render: (val, row) => <span className="text-sm font-medium">{row.productName} {val ? <span className="text-surface-500 font-normal">- {val}</span> : ''}</span> },
     { header: 'Qty', accessor: 'quantity', render: (val) => <span className={`font-bold ${val < 0 ? 'text-danger-600' : 'text-success-600'}`}>{val > 0 ? `+${val}` : val}</span> },
     { header: 'Before', accessor: 'beforeQuantity' },
     { header: 'After', accessor: 'afterQuantity' },
@@ -186,6 +219,21 @@ export default function OperationsReport() {
     link.click();
   };
 
+  const handleExportPDF = () => {
+    const element = contentRef.current;
+    if (!element) return;
+    
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `${activeTab.toLowerCase()}_report.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+
+    html2pdf().set(opt).from(element).save();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -202,8 +250,11 @@ export default function OperationsReport() {
               onEndChange={setEndDate}
             />
           </div>
-          <Button onClick={handleExportCSV} variant="secondary" icon={<Download className="w-4 h-4" />}>
-            Export CSV
+          <Button onClick={handleExportCSV} variant="outline" icon={<FileText className="w-4 h-4" />}>
+            CSV
+          </Button>
+          <Button onClick={handleExportPDF} variant="secondary" icon={<Download className="w-4 h-4" />}>
+            PDF
           </Button>
         </div>
       </div>
@@ -264,8 +315,9 @@ export default function OperationsReport() {
       </Card>
 
       <Card>
-        <div className="border-b border-surface-200">
-          <nav className="flex gap-4 px-4 overflow-x-auto" aria-label="Tabs">
+        <div ref={contentRef}>
+          <div className="border-b border-surface-200">
+            <nav className="flex gap-4 px-4 overflow-x-auto" aria-label="Tabs">
             {['MOVEMENTS', 'TRANSFERS', 'ADJUSTMENTS'].map((tab) => (
               <button
                 key={tab}
@@ -301,6 +353,7 @@ export default function OperationsReport() {
             )}
           </div>
         )}
+        </div>
       </Card>
     </div>
   );

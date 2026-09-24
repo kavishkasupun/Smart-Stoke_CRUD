@@ -39,11 +39,12 @@ export const getBomById = async (id) => {
 /**
  * Get the currently active BOM for a specific finished product variant.
  */
-export const getActiveBomByFinishedVariantId = async (variantId) => {
+export const getActiveBomByFinishedProduct = async (productId, variantId = null) => {
   try {
     const bomsRef = collection(db, COLLECTIONS.BOMS);
     const q = query(
       bomsRef, 
+      where('finishedProductId', '==', productId),
       where('finishedVariantId', '==', variantId),
       where('active', '==', true)
     );
@@ -54,24 +55,28 @@ export const getActiveBomByFinishedVariantId = async (variantId) => {
     }
     return null;
   } catch (error) {
-    console.error(`[BomService] Error fetching active BOM for variant ${variantId}:`, error);
+    console.error(`[BomService] Error fetching active BOM for product ${productId}:`, error);
     throw error;
   }
 };
 
 /**
- * Get all BOM versions for a specific finished product variant, ordered by version descending.
+ * Get all BOM versions for a specific finished product/variant, ordered by version descending.
  */
-export const getBomHistory = async (variantId) => {
+export const getBomHistory = async (productId, variantId = null) => {
   try {
     const bomsRef = collection(db, COLLECTIONS.BOMS);
     // Sort in memory to avoid strict index requirement immediately
-    const q = query(bomsRef, where('finishedVariantId', '==', variantId));
+    const q = query(
+      bomsRef, 
+      where('finishedProductId', '==', productId),
+      where('finishedVariantId', '==', variantId)
+    );
     const snapshot = await getDocs(q);
     const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     return docs.sort((a, b) => (b.version || 0) - (a.version || 0));
   } catch (error) {
-    console.error(`[BomService] Error fetching BOM history for variant ${variantId}:`, error);
+    console.error(`[BomService] Error fetching BOM history for product ${productId}:`, error);
     throw error;
   }
 };
@@ -86,7 +91,11 @@ export const saveBomVersion = async (data, userId) => {
     const bomsRef = collection(db, COLLECTIONS.BOMS);
     
     // 1. Query outside transaction to find the current active one and max version
-    const q = query(bomsRef, where('finishedVariantId', '==', data.finishedVariantId));
+    const q = query(
+      bomsRef, 
+      where('finishedProductId', '==', data.finishedProductId),
+      where('finishedVariantId', '==', data.finishedVariantId || null)
+    );
     const snapshot = await getDocs(q);
     
     let currentActiveId = null;
@@ -103,6 +112,7 @@ export const saveBomVersion = async (data, userId) => {
     
     const payload = withCreationData({
       ...data,
+      finishedVariantId: data.finishedVariantId || null,
       version: newVersion,
       active: true
     }, userId);
@@ -133,7 +143,8 @@ export const saveBomVersion = async (data, userId) => {
       entityId: newBomRef.id,
       afterData: payload,
       metadata: { 
-        finishedVariantId: data.finishedVariantId,
+        finishedProductId: data.finishedProductId,
+        finishedVariantId: data.finishedVariantId || null,
         version: newVersion,
         previousBomId: currentActiveId 
       }

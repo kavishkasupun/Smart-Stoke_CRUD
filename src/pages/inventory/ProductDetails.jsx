@@ -302,168 +302,224 @@ export default function ProductDetails() {
         </Card>
       )}
 
-      {/* Variants Section */}
-      <div className="pt-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-surface-900 flex items-center gap-2">
+      {product.hasVariants === false ? (
+        <div className="pt-4">
+          <h2 className="text-lg font-bold text-surface-900 flex items-center gap-2 mb-4">
             <Box className="w-5 h-5 text-primary-600" />
-            Product Variants & Stock
+            Stock & Pricing Details
           </h2>
-          {canManage && (
-            <Button 
-              size="sm"
-              icon={<Plus className="w-4 h-4" />} 
-              onClick={() => handleOpenModal()}
-            >
-              Add Variant
-            </Button>
-          )}
-        </div>
-
-        <Card>
-          <Table 
-            columns={columns}
-            data={variants}
-            emptyMessage={
-              <div className="text-center py-8">
-                <p className="text-surface-500 mb-4">No variants added yet.</p>
-                {canManage && (
-                  <Button onClick={() => handleOpenModal()} variant="outline">
-                    Add First Variant
-                  </Button>
-                )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold text-surface-900 mb-4 border-b pb-2">Pricing & IDs</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-surface-500">SKU</span>
+                  <span className="font-medium text-surface-900">{product.sku || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-500">Barcode</span>
+                  <span className="font-medium text-surface-900">{product.barcode || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-500">Cost Price</span>
+                  <span className="font-medium text-surface-900">{formatCurrency(product.costPrice)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-500">Selling Price</span>
+                  <span className="font-medium text-surface-900">{formatCurrency(product.sellingPrice)}</span>
+                </div>
               </div>
-            }
-          />
-        </Card>
-      </div>
+            </Card>
 
-      {/* Variant Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => !submitting && setIsModalOpen(false)}
-        title={editingVariant ? 'Edit Variant' : 'Add New Variant'}
-        size="lg"
-      >
-        <form onSubmit={handleSubmitVariant} className="p-6 space-y-6">
-          {error && (
-            <div className="p-3 text-sm text-danger-600 bg-danger-50 border border-danger-100 rounded-lg">
-              {error}
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold text-surface-900 mb-4 border-b pb-2">Current Stock</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-surface-500">Mabola Branch</span>
+                  <Badge variant={product.stock?.mabola === 0 ? 'danger' : (product.stock?.mabola <= product.reorderLevel ? 'warning' : 'surface')}>
+                    {product.stock?.mabola || 0} units
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-surface-500">Jaffna Branch</span>
+                  <Badge variant={product.stock?.jaffna === 0 ? 'danger' : (product.stock?.jaffna <= product.reorderLevel ? 'warning' : 'surface')}>
+                    {product.stock?.jaffna || 0} units
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="text-surface-700 font-semibold">Total Overall Stock</span>
+                  <span className="font-bold text-lg text-surface-900">{product.stock?.overall || 0} units</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Variants Section */}
+          <div className="pt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-surface-900 flex items-center gap-2">
+                <Box className="w-5 h-5 text-primary-600" />
+                Product Variants & Stock
+              </h2>
+              {canManage && (
+                <Button 
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />} 
+                  onClick={() => handleOpenModal()}
+                >
+                  Add Variant
+                </Button>
+              )}
             </div>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Variant Name"
-              placeholder="e.g. 40W Bulb / Red Shirt"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-              disabled={submitting}
-            />
-            <Input
-              label="Size / Measurement (Optional)"
-              placeholder="e.g. 40W, XL, 500ml"
-              value={formData.size}
-              onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-              disabled={submitting}
-            />
+            <Card>
+              <Table 
+                columns={columns}
+                data={variants}
+                emptyMessage={
+                  <div className="text-center py-8">
+                    <p className="text-surface-500 mb-4">No variants added yet.</p>
+                    {canManage && (
+                      <Button onClick={() => handleOpenModal()} variant="outline">
+                        Add First Variant
+                      </Button>
+                    )}
+                  </div>
+                }
+              />
+            </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="SKU (Optional)"
-              placeholder="Leave blank to auto-generate"
-              value={formData.sku}
-              onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-              disabled={submitting}
-            />
-            <Input
-              label="Barcode (Optional)"
-              placeholder="Leave blank to auto-generate"
-              value={formData.barcode}
-              onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-              disabled={submitting}
-            />
-          </div>
+          {/* Variant Modal */}
+          <Modal
+            isOpen={isModalOpen}
+            onClose={() => !submitting && setIsModalOpen(false)}
+            title={editingVariant ? 'Edit Variant' : 'Add New Variant'}
+            size="lg"
+          >
+            <form onSubmit={handleSubmitVariant} className="p-6 space-y-6">
+              {error && (
+                <div className="p-3 text-sm text-danger-600 bg-danger-50 border border-danger-100 rounded-lg">
+                  {error}
+                </div>
+              )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Cost Price (Rs.)"
-              type="number"
-              min="0"
-              step="0.01"
-              value={formData.costPrice}
-              onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
-              required
-              disabled={submitting}
-            />
-            <Input
-              label="Selling Price (Rs.)"
-              type="number"
-              min="0"
-              step="0.01"
-              value={formData.sellingPrice}
-              onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-              required
-              disabled={submitting}
-            />
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Variant Name"
+                  placeholder="e.g. 40W Bulb / Red Shirt"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  disabled={submitting}
+                />
+                <Input
+                  label="Size / Measurement (Optional)"
+                  placeholder="e.g. 40W, XL, 500ml"
+                  value={formData.size}
+                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                  disabled={submitting}
+                />
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Reorder Level"
-              type="number"
-              min="0"
-              placeholder="Alert when stock falls below"
-              value={formData.reorderLevel}
-              onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
-              disabled={submitting}
-            />
-            <Input
-              label="Minimum Stock Level"
-              type="number"
-              min="0"
-              placeholder="Absolute minimum required"
-              value={formData.minimumStockLevel}
-              onChange={(e) => setFormData({ ...formData, minimumStockLevel: e.target.value })}
-              disabled={submitting}
-            />
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="SKU (Optional)"
+                  placeholder="Leave blank to auto-generate"
+                  value={formData.sku}
+                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Barcode (Optional)"
+                  placeholder="Leave blank to auto-generate"
+                  value={formData.barcode}
+                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                  disabled={submitting}
+                />
+              </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="variant-active-toggle"
-              checked={formData.active}
-              onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-              className="w-4 h-4 text-primary-600 rounded border-surface-300 focus:ring-primary-500"
-              disabled={submitting}
-            />
-            <label htmlFor="variant-active-toggle" className="text-sm font-medium text-surface-700">
-              Variant is active and available for sale
-            </label>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Cost Price (Rs.)"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.costPrice}
+                  onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                  required
+                  disabled={submitting}
+                />
+                <Input
+                  label="Selling Price (Rs.)"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.sellingPrice}
+                  onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
+                  required
+                  disabled={submitting}
+                />
+              </div>
 
-          <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-surface-200">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsModalOpen(false)}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={submitting || !formData.name.trim()}
-              isLoading={submitting}
-            >
-              {editingVariant ? 'Save Variant' : 'Add Variant'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Reorder Level"
+                  type="number"
+                  min="0"
+                  placeholder="Alert when stock falls below"
+                  value={formData.reorderLevel}
+                  onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Minimum Stock Level"
+                  type="number"
+                  min="0"
+                  placeholder="Absolute minimum required"
+                  value={formData.minimumStockLevel}
+                  onChange={(e) => setFormData({ ...formData, minimumStockLevel: e.target.value })}
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="variant-active-toggle"
+                  checked={formData.active}
+                  onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 rounded border-surface-300 focus:ring-primary-500"
+                  disabled={submitting}
+                />
+                <label htmlFor="variant-active-toggle" className="text-sm font-medium text-surface-700">
+                  Variant is active and available for sale
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-surface-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsModalOpen(false)}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting || !formData.name.trim()}
+                  isLoading={submitting}
+                >
+                  {editingVariant ? 'Save Variant' : 'Add Variant'}
+                </Button>
+              </div>
+            </form>
+          </Modal>
+        </>
+      )}
     </div>
   );
 }

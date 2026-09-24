@@ -96,7 +96,7 @@ const PrintInvoice = forwardRef(({ invoice }, ref) => {
                 <tr key={idx} className="hover:bg-surface-50 transition-colors">
                   <td className="py-3 px-4">
                     <p className="font-bold text-surface-800">{item.productName}</p>
-                    <p className="text-xs text-surface-500 mt-0.5">Size/Variant: {item.variantName}</p>
+                    {item.variantName && <p className="text-xs text-surface-500 mt-0.5">Size/Variant: {item.variantName}</p>}
                   </td>
                   <td className="py-3 px-4 text-center font-semibold text-surface-800">{item.quantity}</td>
                   {isPriceIncluded && (

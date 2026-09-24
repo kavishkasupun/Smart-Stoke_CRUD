@@ -1,6 +1,7 @@
-import { collection, doc, runTransaction, query, orderBy, getDocs, getDoc } from 'firebase/firestore';
+import { collection, doc, runTransaction, query, orderBy, getDocs, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { COLLECTIONS } from '../config/collections';
+import { uploadFile, getFileUrl } from './../firebase/storage';
 import { withCreationData, generateReferenceNumber } from './dbHelpers';
 import { logAudit } from './auditService';
 import { checkAndCreateLowStockNotifications } from './notificationService';
@@ -63,42 +64,46 @@ export const createInvoice = async (invoiceData, userProfile) => {
     if (!branch) throw new Error("Branch is required.");
     if (!items || items.length === 0) throw new Error("At least one item is required.");
 
-    // 2. Prepare Variant Reads
-    const variantRefs = items.map(item => doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId));
-    const variantSnaps = await Promise.all(variantRefs.map(ref => transaction.get(ref)));
+    // 2. Prepare Stock Reads
+    const stockRefs = items.map(item => 
+      item.variantId 
+        ? doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId)
+        : doc(db, COLLECTIONS.PRODUCTS, item.productId)
+    );
+    const stockSnaps = await Promise.all(stockRefs.map(ref => transaction.get(ref)));
 
     // 3. Process Validation & Calculate New Stock
-    const variantUpdates = [];
+    const stockUpdates = [];
     
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const snap = variantSnaps[i];
+      const snap = stockSnaps[i];
 
       if (!snap.exists()) {
-        throw new Error(`Variant ${item.variantName} does not exist in database.`);
+        throw new Error(`Item ${item.variantName || item.productName} does not exist in database.`);
       }
 
-      const variantData = snap.data();
-      const currentStock = variantData.stock?.[branch] || 0;
-      const currentOverall = variantData.stock?.overall || 0;
+      const stockData = snap.data();
+      const currentStock = stockData.stock?.[branch] || 0;
+      const currentOverall = stockData.stock?.overall || 0;
 
       // Validate Stock
       if (currentStock < item.quantity) {
-        throw new Error(`Insufficient stock for ${variantData.name} in ${branch}. Available: ${currentStock}, Requested: ${item.quantity}.`);
+        throw new Error(`Insufficient stock for ${stockData.name} in ${branch}. Available: ${currentStock}, Requested: ${item.quantity}.`);
       }
 
       // Prepare Update
       const newBranchStock = currentStock - item.quantity;
       const newOverallStock = currentOverall - item.quantity;
 
-      variantUpdates.push({
+      stockUpdates.push({
         ref: snap.ref,
-        productId: variantData.productId,
-        variantId: item.variantId,
-        name: variantData.name,
+        productId: item.productId,
+        variantId: item.variantId || null,
+        name: stockData.name,
         beforeQuantity: currentStock,
         afterQuantity: newBranchStock,
-        minStock: variantData.minimumStockLevel || 0,
+        minStock: stockData.minimumStockLevel || 0,
         updates: {
           [`stock.${branch}`]: newBranchStock,
           'stock.overall': newOverallStock,
@@ -110,8 +115,8 @@ export const createInvoice = async (invoiceData, userProfile) => {
 
     // 4. Execute Writes
     
-    // 4.1 Update Variants
-    variantUpdates.forEach(update => {
+    // 4.1 Update Stock
+    stockUpdates.forEach(update => {
       transaction.update(update.ref, update.updates);
     });
 
@@ -138,7 +143,7 @@ export const createInvoice = async (invoiceData, userProfile) => {
     // 4.3 Create Stock Movements for each item
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const updateData = variantUpdates[i];
+      const updateData = stockUpdates[i];
       
       const movementRef = doc(collection(db, COLLECTIONS.STOCK_MOVEMENTS));
       const movementPayload = withCreationData({
@@ -147,8 +152,8 @@ export const createInvoice = async (invoiceData, userProfile) => {
         referenceNumber: invoiceNumber,
         productId: updateData.productId,
         productName: updateData.name,
-        variantId: item.variantId,
-        variantName: item.variantName,
+        variantId: item.variantId || null,
+        variantName: item.variantName || null,
         branch: branch,
         quantity: -item.quantity, // Negative for deduction
         beforeQuantity: updateData.beforeQuantity,
@@ -159,7 +164,7 @@ export const createInvoice = async (invoiceData, userProfile) => {
       transaction.set(movementRef, movementPayload);
     }
 
-    return { invoiceId: invoiceRef.id, invoiceNumber, variantUpdates };
+    return { invoiceId: invoiceRef.id, invoiceNumber, stockUpdates };
   });
   
   await logAudit({
@@ -173,9 +178,9 @@ export const createInvoice = async (invoiceData, userProfile) => {
   });
   
   // Trigger low stock notifications (non-blocking)
-  if (result.variantUpdates && result.variantUpdates.length > 0) {
-    const notificationPayloads = result.variantUpdates.map(u => ({
-      variantId: u.variantId,
+  if (result.stockUpdates && result.stockUpdates.length > 0) {
+    const notificationPayloads = result.stockUpdates.map(u => ({
+      variantId: u.variantId || null,
       name: u.name,
       branch: invoiceData.branch,
       beforeStock: u.beforeQuantity,
@@ -189,3 +194,31 @@ export const createInvoice = async (invoiceData, userProfile) => {
   
   return result.invoiceId;
 };
+
+/**
+ * Uploads a generated PDF blob to Firebase Storage and updates the invoice record with the URL.
+ * @param {string} invoiceId 
+ * @param {Blob} pdfBlob 
+ * @returns {Promise<string>} The download URL
+ */
+export const uploadInvoicePDF = async (invoiceId, pdfBlob) => {
+  try {
+    const path = `invoices/${invoiceId}.pdf`;
+    
+    // uploadFile returns an UploadTask
+    const uploadTask = await uploadFile(path, pdfBlob, { contentType: 'application/pdf' });
+    
+    // Once uploaded, get the download URL
+    const pdfUrl = await getFileUrl(path);
+    
+    // Update the invoice document
+    const docRef = doc(db, COLLECTIONS.INVOICES, invoiceId);
+    await updateDoc(docRef, { pdfUrl });
+    
+    return pdfUrl;
+  } catch (error) {
+    console.error(`[InvoiceService] Error uploading PDF for ${invoiceId}:`, error);
+    throw error;
+  }
+};
+

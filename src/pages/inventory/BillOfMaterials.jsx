@@ -32,15 +32,22 @@ export default function BillOfMaterials() {
 
       // Enrich BOMs with product and variant names
       const enrichedBoms = bomsData.map(bom => {
-        const variant = variantsData.find(v => v.id === bom.finishedVariantId);
-        const product = productsData.find(p => p.id === variant?.productId);
+        let product = null;
+        let variant = null;
+
+        if (bom.finishedVariantId) {
+          variant = variantsData.find(v => v.id === bom.finishedVariantId);
+          product = productsData.find(p => p.id === variant?.productId) || productsData.find(p => p.id === bom.finishedProductId);
+        } else {
+          product = productsData.find(p => p.id === bom.finishedProductId);
+        }
         
         return {
           ...bom,
           productName: product?.name || 'Unknown Product',
-          variantName: variant?.name || 'Unknown Variant',
+          variantName: variant ? variant.name : (product?.hasVariants === false ? null : 'Unknown Variant'),
           variantSize: variant?.size || '',
-          sku: variant?.sku || ''
+          sku: variant?.sku || product?.sku || ''
         };
       });
 
@@ -60,7 +67,9 @@ export default function BillOfMaterials() {
       render: (val, row) => (
         <div>
           <div className="font-bold text-surface-900">{val}</div>
-          <div className="text-sm text-surface-600">{row.variantName} {row.variantSize && `(${row.variantSize})`}</div>
+          {row.variantName && (
+            <div className="text-sm text-surface-600">{row.variantName} {row.variantSize && `(${row.variantSize})`}</div>
+          )}
         </div>
       )
     },

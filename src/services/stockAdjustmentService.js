@@ -14,7 +14,7 @@ export const createAdjustment = async (adjustmentData, userId) => {
   try {
     const { branch, variantId, adjustQty, type, reason } = adjustmentData;
     
-    if (!branch || !variantId || adjustQty === 0 || !type) {
+    if (!branch || (!variantId && !adjustmentData.productId) || adjustQty === 0 || !type) {
       throw new Error("Missing required fields for adjustment.");
     }
 
@@ -22,16 +22,19 @@ export const createAdjustment = async (adjustmentData, userId) => {
     const adjustmentRef = doc(db, COLLECTIONS.STOCK_ADJUSTMENTS, referenceId);
     
     const result = await runTransaction(db, async (transaction) => {
-      // 1. Read Variant Doc
-      const variantRef = doc(db, COLLECTIONS.PRODUCT_VARIANTS, variantId);
-      const variantSnap = await transaction.get(variantRef);
+      // 1. Read Stock Doc
+      const stockRef = variantId 
+        ? doc(db, COLLECTIONS.PRODUCT_VARIANTS, variantId)
+        : doc(db, COLLECTIONS.PRODUCTS, adjustmentData.productId);
+        
+      const stockSnap = await transaction.get(stockRef);
 
-      if (!variantSnap.exists()) {
-        throw new Error(`Variant ${variantId} does not exist.`);
+      if (!stockSnap.exists()) {
+        throw new Error(`Stock document for ${variantId ? 'variant' : 'product'} does not exist.`);
       }
 
-      const variantData = variantSnap.data();
-      const currentStock = variantData.stock || { mabola: 0, jaffna: 0, overall: 0 };
+      const stockData = stockSnap.data();
+      const currentStock = stockData.stock || { mabola: 0, jaffna: 0, overall: 0 };
       const branchKey = branch.toLowerCase();
 
       if (branchKey !== 'mabola' && branchKey !== 'jaffna') {
@@ -53,8 +56,8 @@ export const createAdjustment = async (adjustmentData, userId) => {
 
       // 2. Perform Writes
       
-      // Update variant
-      transaction.update(variantRef, { stock: newStock });
+      // Update stock doc
+      transaction.update(stockRef, { stock: newStock });
 
       // Create Stock Movement
       const movementRef = doc(collection(db, COLLECTIONS.STOCK_MOVEMENTS));
@@ -62,7 +65,7 @@ export const createAdjustment = async (adjustmentData, userId) => {
         type: 'ADJUSTMENT',
         referenceId: referenceId,
         productId: adjustmentData.productId,
-        variantId: variantId,
+        variantId: variantId || null,
         branch: branch,
         quantity: Number(adjustQty),
         beforeQuantity: beforeQuantity,
@@ -77,7 +80,7 @@ export const createAdjustment = async (adjustmentData, userId) => {
         referenceId,
         branch,
         productId: adjustmentData.productId,
-        variantId,
+        variantId: variantId || null,
         adjustQty: Number(adjustQty),
         beforeQuantity,
         afterQuantity,
@@ -89,9 +92,9 @@ export const createAdjustment = async (adjustmentData, userId) => {
       transaction.set(adjustmentRef, adjPayload);
 
       return {
-        variantId,
-        name: variantData.name,
-        minStock: variantData.minimumStockLevel || 0,
+        variantId: variantId || null,
+        name: stockData.name,
+        minStock: stockData.minimumStockLevel || 0,
         beforeQuantity,
         afterQuantity
       };

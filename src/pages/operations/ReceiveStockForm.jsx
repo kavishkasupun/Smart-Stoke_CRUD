@@ -86,9 +86,16 @@ export default function ReceiveStockForm() {
       return;
     }
 
-    const invalidItems = items.filter(i => !i.productId || !i.variantId || !i.quantity || Number(i.quantity) <= 0);
+    const invalidItems = items.filter(i => {
+      const product = products.find(p => p.id === i.productId);
+      if (!product) return true;
+      if (product.hasVariants !== false && !i.variantId) return true;
+      if (!i.quantity || Number(i.quantity) <= 0) return true;
+      return false;
+    });
+
     if (invalidItems.length > 0) {
-      toast.error('Please ensure all items have a product, variant, and quantity > 0.');
+      toast.error('Please ensure all items have a valid product, variant (if applicable), and quantity > 0.');
       return;
     }
 
@@ -196,7 +203,9 @@ export default function ReceiveStockForm() {
 
           <div className="space-y-4">
             {items.map((item, index) => {
+              const selectedProduct = products.find(p => p.id === item.productId);
               const productVariants = variants.filter(v => v.productId === item.productId);
+              const hasVariants = selectedProduct ? selectedProduct.hasVariants !== false : true;
               
               return (
                 <div key={item.id} className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative">
@@ -228,19 +237,21 @@ export default function ReceiveStockForm() {
                       </select>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
-                      <select
-                        className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-                        value={item.variantId}
-                        onChange={e => handleItemChange(item.id, 'variantId', e.target.value)}
-                        required
-                        disabled={!item.productId}
-                      >
-                        <option value="">Select Variant...</option>
-                        {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
-                      </select>
-                    </div>
+                    {hasVariants && (
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
+                        <select
+                          className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                          value={item.variantId}
+                          onChange={e => handleItemChange(item.id, 'variantId', e.target.value)}
+                          required
+                          disabled={!item.productId}
+                        >
+                          <option value="">Select Variant...</option>
+                          {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
+                        </select>
+                      </div>
+                    )}
 
                     <Input
                       label="Quantity *"

@@ -15,6 +15,7 @@ export default function AdjustmentHistory() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [variantsMap, setVariantsMap] = useState({});
+  const [productsMap, setProductsMap] = useState({});
   const canAdjust = userProfile ? canAdjustStock(userProfile.role, userProfile.branchId, 'all') : false;
 
   useEffect(() => {
@@ -24,9 +25,10 @@ export default function AdjustmentHistory() {
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      const [data, allVariants] = await Promise.all([
+      const [data, allVariants, allProducts] = await Promise.all([
         getAdjustmentsHistory(),
-        getProductVariants() // fetch all active to map IDs to names
+        getProductVariants(), // fetch all active to map IDs to names
+        getProducts() 
       ]);
       
       const vMap = {};
@@ -34,6 +36,12 @@ export default function AdjustmentHistory() {
         vMap[v.id] = v.name + (v.size ? ` (${v.size})` : '');
       });
       setVariantsMap(vMap);
+
+      const pMap = {};
+      allProducts.forEach(p => {
+        pMap[p.id] = p.name;
+      });
+      setProductsMap(pMap);
       setHistory(data);
     } catch (error) {
       console.error('Failed to load adjustments history:', error);
@@ -71,9 +79,14 @@ export default function AdjustmentHistory() {
       render: (val) => <Badge variant="surface">{val}</Badge>
     },
     { 
-      header: 'Variant', 
-      accessor: 'variantId',
-      render: (val) => <span className="text-surface-700">{variantsMap[val] || 'Unknown Variant'}</span>
+      header: 'Item', 
+      accessor: 'productId',
+      render: (val, row) => (
+        <div>
+          <div className="font-medium text-surface-900">{productsMap[val] || 'Unknown Product'}</div>
+          {row.variantId && <div className="text-xs text-surface-500">{variantsMap[row.variantId]}</div>}
+        </div>
+      )
     },
     { 
       header: 'Type', 

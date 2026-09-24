@@ -30,15 +30,15 @@ export default function ProductionList() {
       ]);
 
       const enrichedOrders = ordersData.map(order => {
-        const variant = variantsData.find(v => v.id === order.finishedVariantId);
         const product = productsData.find(p => p.id === order.finishedProductId);
+        const variant = order.finishedVariantId ? variantsData.find(v => v.id === order.finishedVariantId) : null;
         
         return {
           ...order,
           productName: product?.name || 'Unknown Product',
-          variantName: variant?.name || 'Unknown Variant',
+          variantName: variant ? variant.name : '',
           variantSize: variant?.size || '',
-          sku: variant?.sku || ''
+          sku: variant ? (variant.sku || '') : (product?.sku || '')
         };
       });
 
@@ -60,7 +60,11 @@ export default function ProductionList() {
     { 
       header: 'Date', 
       accessor: 'createdAt',
-      render: (val) => <span className="text-sm text-surface-600">{val ? new Date(val).toLocaleString() : 'N/A'}</span>
+      render: (val) => {
+        if (!val) return <span className="text-sm text-surface-600">N/A</span>;
+        const d = val?.toDate ? val.toDate() : new Date(val);
+        return <span className="text-sm text-surface-600">{isNaN(d) ? 'N/A' : d.toLocaleString()}</span>;
+      }
     },
     { 
       header: 'Branch', 
@@ -73,7 +77,11 @@ export default function ProductionList() {
       render: (val, row) => (
         <div>
           <div className="font-medium text-surface-900">{val}</div>
-          <div className="text-xs text-surface-500">{row.variantName} {row.variantSize && `(${row.variantSize})`} • {row.sku}</div>
+          <div className="text-xs text-surface-500">
+            {row.variantName && `${row.variantName} `}
+            {row.variantSize && `(${row.variantSize}) `}
+            {row.sku && `• ${row.sku}`}
+          </div>
         </div>
       )
     },
@@ -86,8 +94,8 @@ export default function ProductionList() {
       header: 'Status', 
       accessor: 'status',
       render: (val) => (
-        <Badge variant={val === 'DRAFT' ? 'warning' : 'success'}>
-          {val === 'DRAFT' ? 'Draft' : 'Completed'}
+        <Badge variant={val === 'DRAFT' ? 'warning' : val === 'CANCELED' ? 'danger' : 'success'}>
+          {val === 'DRAFT' ? 'Draft' : val === 'CANCELED' ? 'Canceled' : 'Completed'}
         </Badge>
       )
     },

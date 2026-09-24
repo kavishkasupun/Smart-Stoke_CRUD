@@ -29,23 +29,27 @@ export const processStockReceive = async (receiveData, items, userId) => {
         throw new Error(`A stock receive with reference ${receiveData.referenceId} already exists.`);
       }
 
-      // 2. Read all variant documents first (Firestore rule: all reads must come before writes in a transaction)
-      const variantRefs = items.map(item => doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId));
-      const variantSnaps = await Promise.all(variantRefs.map(ref => transaction.get(ref)));
+      // 2. Read all stock documents first (Firestore rule: all reads must come before writes in a transaction)
+      const stockRefs = items.map(item => {
+        return item.variantId 
+          ? doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId)
+          : doc(db, COLLECTIONS.PRODUCTS, item.productId);
+      });
+      const stockSnaps = await Promise.all(stockRefs.map(ref => transaction.get(ref)));
 
-      const variantUpdates = [];
+      const stockUpdates = [];
 
       // Process each item
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const variantSnap = variantSnaps[i];
+        const stockSnap = stockSnaps[i];
 
-        if (!variantSnap.exists()) {
-          throw new Error(`Variant ${item.variantId} does not exist.`);
+        if (!stockSnap.exists()) {
+          throw new Error(`Stock document for ${item.variantId ? 'variant' : 'product'} does not exist.`);
         }
 
-        const variantData = variantSnap.data();
-        const currentStock = variantData.stock || { mabola: 0, jaffna: 0, overall: 0 };
+        const stockData = stockSnap.data();
+        const currentStock = stockData.stock || { mabola: 0, jaffna: 0, overall: 0 };
         const branchKey = receiveData.destinationBranch.toLowerCase(); // 'mabola' or 'jaffna'
         
         if (branchKey !== 'mabola' && branchKey !== 'jaffna') {
@@ -61,8 +65,8 @@ export const processStockReceive = async (receiveData, items, userId) => {
           overall: (currentStock.overall || 0) + Number(item.quantity)
         };
 
-        variantUpdates.push({
-          ref: variantRefs[i],
+        stockUpdates.push({
+          ref: stockRefs[i],
           data: { stock: newStock },
           beforeQuantity,
           afterQuantity
@@ -71,8 +75,8 @@ export const processStockReceive = async (receiveData, items, userId) => {
 
       // 3. Perform Writes (After all reads are complete)
       
-      // Update variants
-      variantUpdates.forEach(update => {
+      // Update stock docs
+      stockUpdates.forEach(update => {
         transaction.update(update.ref, update.data);
       });
 
@@ -83,13 +87,13 @@ export const processStockReceive = async (receiveData, items, userId) => {
           type: 'RECEIVE',
           referenceId: receiveData.referenceId,
           productId: item.productId,
-          variantId: item.variantId,
+          variantId: item.variantId || null,
           branch: receiveData.destinationBranch,
           quantity: Number(item.quantity),
           costPrice: Number(item.costPrice || 0),
           batchReference: item.batchReference || '',
-          beforeQuantity: variantUpdates[index].beforeQuantity,
-          afterQuantity: variantUpdates[index].afterQuantity
+          beforeQuantity: stockUpdates[index].beforeQuantity,
+          afterQuantity: stockUpdates[index].afterQuantity
         }, userId);
         transaction.set(movementRef, movementData);
       });

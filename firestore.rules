@@ -159,7 +159,8 @@ service cloud.firestore {
     match /productions/{productionId} {
       allow read: if isAuthenticated() && canAccessBranch(resource.data.branch);
       allow create: if (isInventoryManager() || isBranchManager()) && isCreatingForOwnBranch();
-      allow update, delete: if false; // Immutable
+      allow update: if (isInventoryManager() || isBranchManager());
+      allow delete: if false; // Immutable
     }
 
     // -------------------------------------------------------------------------

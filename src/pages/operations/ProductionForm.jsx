@@ -4,7 +4,7 @@ import { ArrowLeft, Save, Loader2, Factory, FileText, AlertCircle, CheckCircle2 
 import { Card, Button, Input, Badge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProducts, getProductVariants } from '../../services/productService';
-import { getActiveBomByFinishedVariantId } from '../../services/bomService';
+import { getActiveBomByFinishedProduct } from '../../services/bomService';
 import { createDraftProductionOrder } from '../../services/productionService';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -50,24 +50,41 @@ export default function ProductionForm() {
 
   useEffect(() => {
     if (selectedProduct) {
-      getProductVariants(selectedProduct).then(variants => {
-        setAvailableVariants(variants);
+      const p = finishedProducts.find(prod => prod.id === selectedProduct);
+      if (p && p.hasVariants !== false) {
+        getProductVariants(selectedProduct).then(variants => {
+          setAvailableVariants(variants);
+          setSelectedVariant('');
+        });
+      } else {
+        setAvailableVariants([]);
         setSelectedVariant('');
-        setActiveBom(null);
-        setBomMaterials([]);
-      });
+      }
     }
-  }, [selectedProduct]);
+  }, [selectedProduct, finishedProducts]);
 
   useEffect(() => {
-    if (selectedVariant) {
-      loadBomAndStock(selectedVariant);
+    if (selectedProduct) {
+      const p = finishedProducts.find(prod => prod.id === selectedProduct);
+      const hasVariants = p ? p.hasVariants !== false : true;
+      
+      if (hasVariants && selectedVariant) {
+        loadBomAndStock(selectedProduct, selectedVariant);
+      } else if (!hasVariants) {
+        loadBomAndStock(selectedProduct, null);
+      } else {
+        setActiveBom(null);
+        setBomMaterials([]);
+      }
+    } else {
+      setActiveBom(null);
+      setBomMaterials([]);
     }
-  }, [selectedVariant, selectedBranch]); // Reload if branch changes so we get correct stock
+  }, [selectedProduct, selectedVariant, selectedBranch, finishedProducts]);
 
-  const loadBomAndStock = async (variantId) => {
+  const loadBomAndStock = async (productId, variantId) => {
     try {
-      const bom = await getActiveBomByFinishedVariantId(variantId);
+      const bom = await getActiveBomByFinishedProduct(productId, variantId);
       if (bom) {
         setActiveBom(bom);
         
@@ -76,15 +93,26 @@ export default function ProductionForm() {
         const allProducts = await getProducts();
 
         const enrichedMaterials = bom.materials.map(m => {
-          const v = allVariants.find(vari => vari.id === m.variantId);
-          const p = allProducts.find(prod => prod.id === v?.productId);
-          return {
-            ...m,
-            name: p?.name || 'Unknown',
-            size: v?.size || '',
-            sku: v?.sku || '',
-            stock: v?.stock || { mabola: 0, jaffna: 0, overall: 0 }
-          };
+          if (m.variantId) {
+             const v = allVariants.find(vari => vari.id === m.variantId);
+             const p = allProducts.find(prod => prod.id === v?.productId);
+             return {
+               ...m,
+               name: p?.name || 'Unknown',
+               size: v?.size || '',
+               sku: v?.sku || '',
+               stock: v?.stock || { mabola: 0, jaffna: 0, overall: 0 }
+             };
+          } else {
+             const p = allProducts.find(prod => prod.id === m.productId);
+             return {
+               ...m,
+               name: p?.name || 'Unknown',
+               size: '',
+               sku: p?.sku || '',
+               stock: p?.stock || { mabola: 0, jaffna: 0, overall: 0 }
+             };
+          }
         });
 
         setBomMaterials(enrichedMaterials);
@@ -130,7 +158,12 @@ export default function ProductionForm() {
 
   const handleSaveDraft = async (e) => {
     e.preventDefault();
-    if (!selectedVariant || quantity <= 0) return toast.error('Invalid quantity');
+    const p = finishedProducts.find(prod => prod.id === selectedProduct);
+    const hasVariants = p ? p.hasVariants !== false : true;
+
+    if (hasVariants && !selectedVariant) return toast.error('Select a finished product variant');
+    if (!selectedProduct) return toast.error('Select a finished product');
+    if (quantity <= 0) return toast.error('Invalid quantity');
     if (!activeBom) return toast.error('No BOM found for this product');
     if (hasShortage) return toast.error('Cannot create order with raw material shortages');
 
@@ -139,12 +172,13 @@ export default function ProductionForm() {
       const payload = {
         branch: selectedBranch,
         finishedProductId: selectedProduct,
-        finishedVariantId: selectedVariant,
+        finishedVariantId: selectedVariant || null,
         bomId: activeBom.id,
         quantityProduced: quantity,
         notes,
         materials: bomMaterials.map(m => ({
-          variantId: m.variantId,
+          productId: m.productId,
+          variantId: m.variantId || null,
           quantityPerUnit: m.quantity,
           totalRequired: m.quantity * quantity,
           availableAtCreation: m.stock[selectedBranch.toLowerCase()] || 0
@@ -220,20 +254,22 @@ export default function ProductionForm() {
                 </select>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-surface-700">Specific Variant / Size</label>
-                <select
-                  value={selectedVariant}
-                  onChange={(e) => setSelectedVariant(e.target.value)}
-                  disabled={!selectedProduct || saving}
-                  className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-                >
-                  <option value="">Select Variant...</option>
-                  {availableVariants.map(v => (
-                    <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>
-                  ))}
-                </select>
-              </div>
+              {finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false && (
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-surface-700">Specific Variant / Size</label>
+                  <select
+                    value={selectedVariant}
+                    onChange={(e) => setSelectedVariant(e.target.value)}
+                    disabled={!selectedProduct || saving}
+                    className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                  >
+                    <option value="">Select Variant...</option>
+                    {availableVariants.map(v => (
+                      <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-surface-700">Quantity to Produce</label>
@@ -263,7 +299,7 @@ export default function ProductionForm() {
                 onClick={handleSaveDraft}
                 isLoading={saving}
                 icon={<Save className="w-4 h-4" />}
-                disabled={!selectedVariant || !activeBom || hasShortage || quantity <= 0}
+                disabled={(!selectedVariant && finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false) || !activeBom || hasShortage || quantity <= 0}
                 className="w-full"
               >
                 Save Draft Order
@@ -280,7 +316,7 @@ export default function ProductionForm() {
               Material Requirements Preview
             </h3>
             
-            {!selectedVariant ? (
+            {(!selectedVariant && finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false) ? (
               <div className="flex flex-col items-center justify-center h-48 text-surface-400">
                 <Factory className="w-12 h-12 mb-4 opacity-50 text-surface-300" />
                 <p>Select a product to preview material requirements.</p>

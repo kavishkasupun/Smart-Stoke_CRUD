@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, FileText } from 'lucide-react';
 import { Card, Table, Badge, Input, Select, Button, Spinner, DateRangePicker } from '../../components/ui';
 import { getSalesReportData } from '../../services/reportService';
+import html2pdf from 'html2pdf.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { BRANCHES } from '../../config/constants';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -11,6 +12,7 @@ export default function SalesReport() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ invoices: [], returns: [] });
   const [activeTab, setActiveTab] = useState('INVOICES');
+  const contentRef = React.useRef(null);
   
   // Date Range
   const [startDate, setStartDate] = useState(() => {
@@ -106,7 +108,7 @@ export default function SalesReport() {
     { header: 'Date', accessor: 'createdAt', render: (val) => formatDate(val, { includeTime: true }) },
     { header: 'Branch', accessor: 'branch', render: (val) => <Badge variant="info">{val}</Badge> },
     { header: 'Invoice #', accessor: 'invoiceNumber' },
-    { header: 'Product', accessor: 'variantName', render: (val, row) => <span className="text-sm">{row.productName} - {val}</span> },
+    { header: 'Product', accessor: 'variantName', render: (val, row) => <span className="text-sm font-medium">{row.productName} {val ? <span className="text-surface-500 font-normal">- {val}</span> : ''}</span> },
     { header: 'Qty', accessor: 'returnQuantity', render: (val) => <span className="font-bold text-danger-600">{val}</span> },
     { header: 'Reason', accessor: 'reason', render: (val) => <Badge variant="warning">{val}</Badge> },
   ];
@@ -156,6 +158,21 @@ export default function SalesReport() {
     link.click();
   };
 
+  const handleExportPDF = () => {
+    const element = contentRef.current;
+    if (!element) return;
+    
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `${activeTab.toLowerCase()}_report.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+
+    html2pdf().set(opt).from(element).save();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -172,8 +189,11 @@ export default function SalesReport() {
               onEndChange={setEndDate}
             />
           </div>
-          <Button onClick={handleExportCSV} variant="secondary" icon={<Download className="w-4 h-4" />}>
-            Export CSV
+          <Button onClick={handleExportCSV} variant="outline" icon={<FileText className="w-4 h-4" />}>
+            CSV
+          </Button>
+          <Button onClick={handleExportPDF} variant="secondary" icon={<Download className="w-4 h-4" />}>
+            PDF
           </Button>
         </div>
       </div>
@@ -213,8 +233,9 @@ export default function SalesReport() {
       </Card>
 
       <Card>
-        <div className="border-b border-surface-200">
-          <nav className="flex gap-4 px-4" aria-label="Tabs">
+        <div ref={contentRef}>
+          <div className="border-b border-surface-200">
+            <nav className="flex gap-4 px-4" aria-label="Tabs">
             {['INVOICES', 'RETURNS'].map((tab) => (
               <button
                 key={tab}
@@ -252,6 +273,7 @@ export default function SalesReport() {
             )}
           </div>
         )}
+        </div>
       </Card>
     </div>
   );

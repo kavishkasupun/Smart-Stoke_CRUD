@@ -1,21 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Factory, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { useRef } from 'react';
+import html2pdf from 'html2pdf.js';
+import { ArrowLeft, Factory, FileText, CheckCircle2, Clock, Download } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
-import { getProductionOrderById, confirmProductionOrder } from '../../services/productionService';
+import { getProductionOrderById, confirmProductionOrder, cancelProductionOrder } from '../../services/productionService';
 import { getProducts, getProductVariants } from '../../services/productService';
 import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 export default function ProductionDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userProfile } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [order, setOrder] = useState(null);
+  const contentRef = useRef(null);
+  
+  const handleDownloadPDF = () => {
+    const element = contentRef.current;
+    if (!element) return;
+    const opt = {
+      margin: 10,
+      filename: `production_${order.referenceId}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
   
   const [finishedProduct, setFinishedProduct] = useState(null);
   const [finishedVariant, setFinishedVariant] = useState(null);
@@ -51,13 +70,13 @@ export default function ProductionDetails() {
 
       // Map raw material names
       const enrichedMaterials = (productionOrder.materialsRequired || []).map(m => {
-        const mv = allVariants.find(v => v.id === m.variantId);
-        const mp = allProducts.find(p => p.id === mv?.productId);
+        const mp = allProducts.find(p => p.id === m.productId);
+        const mv = m.variantId ? allVariants.find(v => v.id === m.variantId) : null;
         return {
           ...m,
           name: mp?.name || 'Unknown',
           size: mv?.size || '',
-          sku: mv?.sku || ''
+          sku: mv ? (mv.sku || '') : (mp?.sku || '')
         };
       });
       
@@ -72,11 +91,17 @@ export default function ProductionDetails() {
   };
 
   const handleConfirm = async () => {
-    if (!window.confirm("Are you sure you want to confirm this production run? This will permanently deduct raw materials and add finished stock.")) {
-      return;
-    }
+    const isConfirmed = await confirm({
+      title: 'Confirm Production',
+      message: 'Are you sure you want to confirm this production run? This will permanently deduct raw materials and add finished stock.',
+      confirmText: 'Confirm & Deduct',
+      type: 'warning'
+    });
+
+    if (!isConfirmed) return;
     
     setConfirming(true);
+    toast.showLoading('Confirming production and deducting stock...');
     try {
       await confirmProductionOrder(id, userProfile.id);
       toast.success('Production confirmed successfully! Stock has been updated.');
@@ -86,6 +111,32 @@ export default function ProductionDetails() {
       toast.error(error.message || 'Failed to confirm production.');
     } finally {
       setConfirming(false);
+      toast.hideLoading();
+    }
+  };
+
+  const handleCancel = async () => {
+    const isConfirmed = await confirm({
+      title: 'Cancel Production',
+      message: 'Are you sure you want to cancel this draft production order?',
+      confirmText: 'Cancel Order',
+      type: 'danger'
+    });
+
+    if (!isConfirmed) return;
+    
+    setCanceling(true);
+    toast.showLoading('Canceling production order...');
+    try {
+      await cancelProductionOrder(id, userProfile.id);
+      toast.success('Production order canceled successfully.');
+      fetchData(); // Reload details to show CANCELED status
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || 'Failed to cancel production.');
+    } finally {
+      setCanceling(false);
+      toast.hideLoading();
     }
   };
 
@@ -105,8 +156,8 @@ export default function ProductionDetails() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-surface-900">Order: {order.referenceId}</h1>
-              <Badge variant={order.status === 'DRAFT' ? 'warning' : 'success'}>
-                {order.status === 'DRAFT' ? 'Draft' : 'Completed'}
+              <Badge variant={order.status === 'DRAFT' ? 'warning' : order.status === 'CANCELED' ? 'danger' : 'success'}>
+                {order.status === 'DRAFT' ? 'Draft' : order.status === 'CANCELED' ? 'Canceled' : 'Completed'}
               </Badge>
             </div>
             <p className="text-sm text-surface-500 mt-1 flex items-center gap-2">
@@ -117,16 +168,35 @@ export default function ProductionDetails() {
         </div>
 
         {order.status === 'DRAFT' && (
-          <Button 
-            icon={<CheckCircle2 className="w-4 h-4" />}
-            onClick={handleConfirm}
-            isLoading={confirming}
-          >
-            Confirm & Deduct Stock
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline"
+              className="text-danger-600 border-danger-200 hover:bg-danger-50"
+              onClick={handleCancel}
+              isLoading={canceling}
+              disabled={confirming}
+            >
+              Cancel Order
+            </Button>
+            <Button 
+              icon={<CheckCircle2 className="w-4 h-4" />}
+              onClick={handleConfirm}
+              isLoading={confirming}
+              disabled={canceling}
+            >
+              Confirm & Deduct Stock
+            </Button>
+          </div>
+        )}
+        
+        {order.status !== 'DRAFT' && (
+          <Button variant="outline" icon={<Download className="w-4 h-4" />} onClick={handleDownloadPDF}>
+            PDF
           </Button>
         )}
       </div>
 
+      <div ref={contentRef} className="space-y-6 bg-white p-2">
       {order.status === 'DRAFT' && (
         <div className="bg-primary-50 border border-primary-200 text-primary-800 p-4 rounded-lg">
           <p className="text-sm">
@@ -211,6 +281,7 @@ export default function ProductionDetails() {
           </Card>
         </div>
 
+      </div>
       </div>
     </div>
   );

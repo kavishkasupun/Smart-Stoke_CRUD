@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Search, Filter } from 'lucide-react';
+import { Download, Search, Filter, FileText } from 'lucide-react';
 import { Card, Table, Badge, Input, Select, Button, Spinner } from '../../components/ui';
 import { getInventoryReportData } from '../../services/reportService';
+import html2pdf from 'html2pdf.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { BRANCHES } from '../../config/constants';
 
@@ -9,6 +10,7 @@ export default function InventoryReport() {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
+  const contentRef = React.useRef(null);
   
   // Filters
   const [branchFilter, setBranchFilter] = useState('');
@@ -153,6 +155,21 @@ export default function InventoryReport() {
     link.click();
   };
 
+  const handleExportPDF = () => {
+    const element = contentRef.current;
+    if (!element) return;
+    
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: `inventory_report.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -160,9 +177,14 @@ export default function InventoryReport() {
           <h1 className="text-2xl font-bold text-surface-900">Inventory Status Report</h1>
           <p className="text-sm text-surface-500 mt-1">Current snapshot of all products and variants.</p>
         </div>
-        <Button onClick={handleExportCSV} variant="secondary" icon={<Download className="w-4 h-4" />} disabled={filteredData.length === 0}>
-          Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleExportCSV} variant="outline" icon={<FileText className="w-4 h-4" />} disabled={filteredData.length === 0}>
+            CSV
+          </Button>
+          <Button onClick={handleExportPDF} variant="secondary" icon={<Download className="w-4 h-4" />} disabled={filteredData.length === 0}>
+            PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4 flex flex-col md:flex-row gap-4">
@@ -199,6 +221,7 @@ export default function InventoryReport() {
       </Card>
 
       <Card>
+        <div ref={contentRef}>
         {loading ? (
           <div className="flex items-center justify-center h-64">
              <Spinner size="lg" />
@@ -210,6 +233,7 @@ export default function InventoryReport() {
             emptyMessage="No variants found matching your filters."
           />
         )}
+        </div>
       </Card>
     </div>
   );

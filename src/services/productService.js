@@ -51,9 +51,23 @@ export const addProduct = async (data, userId) => {
     const productRef = doc(collection(db, COLLECTIONS.PRODUCTS));
     const payload = withCreationData({
       ...data,
-      productType: data.productType || 'FINISHED_PRODUCT', // default to finished product for backward compatibility
+      productType: data.productType || 'FINISHED_PRODUCT',
+      hasVariants: data.hasVariants !== undefined ? data.hasVariants : true,
       active: data.active !== undefined ? data.active : true,
     }, userId);
+
+    if (payload.hasVariants === false) {
+      payload.stock = { mabola: 0, jaffna: 0, overall: 0 };
+      
+      // Auto-generate SKU/Barcode if missing for non-variant products
+      if (!payload.sku) {
+        payload.sku = `SKU-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+      }
+      
+      if (!payload.barcode) {
+        payload.barcode = `BC-${Date.now()}`;
+      }
+    }
     
     await setDoc(productRef, payload);
     
@@ -80,6 +94,9 @@ export const updateProduct = async (id, data, userId) => {
     const beforeSnap = await getDoc(productRef);
     const beforeData = beforeSnap.exists() ? beforeSnap.data() : null;
 
+    // If changing from hasVariants = true to false, we should initialize stock if missing
+    // But architecture plan states: "A product cannot switch between variant and non-variant mode if it already has stock"
+    // So we just merge the data safely.
     const payload = withUpdateData(data, userId);
     await setDoc(productRef, payload, { merge: true });
 
@@ -227,6 +244,31 @@ export const deleteVariant = async (id) => {
     return id;
   } catch (error) {
     console.error(`[ProductService] Error deleting variant ${id}:`, error);
+    throw error;
+  }
+};
+
+// ==========================================
+// MIGRATION UTILITY
+// ==========================================
+export const migrateProductsToHasVariants = async () => {
+  try {
+    const productsRef = collection(db, COLLECTIONS.PRODUCTS);
+    const snapshot = await getDocs(productsRef);
+    
+    let count = 0;
+    for (const document of snapshot.docs) {
+      const data = document.data();
+      if (data.hasVariants === undefined) {
+        // If it was created before this feature, it assumed it had variants.
+        await setDoc(doc(db, COLLECTIONS.PRODUCTS, document.id), { hasVariants: true }, { merge: true });
+        count++;
+      }
+    }
+    console.log(`Migrated ${count} products successfully.`);
+    return count;
+  } catch (error) {
+    console.error("Migration failed:", error);
     throw error;
   }
 };

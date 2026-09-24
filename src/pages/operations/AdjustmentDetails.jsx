@@ -28,9 +28,13 @@ export default function AdjustmentDetails() {
         try {
           const prod = await getProductById(res.productId);
           if (prod) setProductName(prod.name);
-          const vars = await getProductVariants(res.productId);
-          const variant = vars.find(v => v.id === res.variantId);
-          if (variant) setVariantName(variant.size ? `${variant.name} (${variant.size})` : variant.name);
+          if (res.variantId) {
+            const vars = await getProductVariants(res.productId);
+            const variant = vars.find(v => v.id === res.variantId);
+            if (variant) setVariantName(variant.size ? `${variant.name} (${variant.size})` : variant.name);
+          } else {
+            setVariantName(null);
+          }
         } catch (e) {
           console.error('Failed to fetch product names');
         }
@@ -104,7 +108,7 @@ export default function AdjustmentDetails() {
           <div className="mb-6">
             <span className="block text-xs text-surface-500 mb-1">Product & Variant</span>
             <span className="block font-bold text-lg text-surface-900">{productName}</span>
-            <span className="block text-surface-600">{variantName || data.variantId}</span>
+            {variantName && <span className="block text-surface-600">{variantName}</span>}
           </div>
 
           <div className="grid grid-cols-3 gap-4 text-center items-center">

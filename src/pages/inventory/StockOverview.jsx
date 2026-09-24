@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, Box } from 'lucide-react';
 import { Card, Table, Badge, Input, Spinner } from '../../components/ui';
-import { getProductVariants } from '../../services/productService';
-import { getCategories } from '../../services/categoryService';
+import { getProductVariants, getProducts } from '../../services/productService';
 
 export default function StockOverview() {
   const [variants, setVariants] = useState([]);
@@ -20,14 +19,23 @@ export default function StockOverview() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [variantsData, categoriesData] = await Promise.all([
-        getProductVariants(), // We need a way to fetch all variants or change productService
-        getCategories()
+      const [variantsData, productsData] = await Promise.all([
+        getProductVariants(), 
+        getProducts()
       ]);
       
-      // Need to adjust getProductVariants in productService to fetch all if no productId is provided.
-      setVariants(variantsData);
-      setCategories(categoriesData);
+      const nonVariantProducts = productsData.filter(p => p.hasVariants === false).map(p => ({
+        id: p.id,
+        productId: p.id,
+        name: p.name,
+        sku: p.sku,
+        stock: p.stock,
+        reorderLevel: p.reorderLevel,
+        active: p.active,
+        size: ''
+      }));
+
+      setVariants([...variantsData, ...nonVariantProducts]);
     } catch (error) {
       console.error('Failed to load stock overview data:', error);
     } finally {

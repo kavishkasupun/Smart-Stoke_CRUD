@@ -22,6 +22,7 @@ export const Select = forwardRef(function Select(
     hint,
     placeholder = 'Select an option',
     options = [],
+    children,
     fullWidth = true,
     className,
     wrapperClassName,
@@ -62,16 +63,20 @@ export const Select = forwardRef(function Select(
           )}
           {...props}
         >
-          {placeholder && (
-            <option value="" disabled>
-              {placeholder}
-            </option>
+          {children || (
+            <>
+              {placeholder && (
+                <option value="" disabled>
+                  {placeholder}
+                </option>
+              )}
+              {options.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </>
           )}
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
         </select>
         <div className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none">
           <ChevronDown className="w-4 h-4" />

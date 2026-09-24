@@ -8,6 +8,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { USER_ROLES } from './config/constants';
 import { Loader2 } from 'lucide-react';
+import { PageLoader } from './components/ui/Loading';
 
 // Eagerly load login and dashboard for perceived performance
 import Login from './pages/Login';
@@ -27,6 +28,7 @@ const NotificationSettings = React.lazy(() => import('./pages/settings/Notificat
 // Reports Pages
 const ReportsDashboard = React.lazy(() => import('./pages/reports/ReportsDashboard'));
 const InventoryReport = React.lazy(() => import('./pages/reports/InventoryReport'));
+const ProductStockHistory = React.lazy(() => import('./pages/reports/ProductStockHistory'));
 const SalesReport = React.lazy(() => import('./pages/reports/SalesReport'));
 const OperationsReport = React.lazy(() => import('./pages/reports/OperationsReport'));
 
@@ -71,8 +73,6 @@ const InvoiceDetails = React.lazy(() => import('./pages/sales/InvoiceDetails'));
 const SalesReturns = React.lazy(() => import('./pages/sales/SalesReturns'));
 const CreateReturnForm = React.lazy(() => import('./pages/sales/CreateReturnForm'));
 const ReturnDetails = React.lazy(() => import('./pages/sales/ReturnDetails'));
-
-import { PageLoader } from './components/ui/Loading';
 
 function App() {
   return (
@@ -144,6 +144,7 @@ function App() {
                       {/* Reports */}
                       <Route path="/reports/dashboard" element={<ReportsDashboard />} />
                       <Route path="/reports/inventory" element={<InventoryReport />} />
+                      <Route path="/reports/product-history" element={<ProductStockHistory />} />
                       <Route path="/reports/sales" element={<SalesReport />} />
                       <Route path="/reports/operations" element={<OperationsReport />} />
 

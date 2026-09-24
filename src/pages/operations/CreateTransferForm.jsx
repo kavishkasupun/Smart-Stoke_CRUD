@@ -76,12 +76,19 @@ export default function CreateTransferForm() {
     }
   };
 
-  const getAvailableStock = (variantId) => {
-    if (!transferData.sourceBranch || !variantId) return 0;
-    const variant = variants.find(v => v.id === variantId);
-    if (!variant || !variant.stock) return 0;
+  const getAvailableStock = (productId, variantId) => {
+    if (!transferData.sourceBranch || !productId) return 0;
     const branchKey = transferData.sourceBranch.toLowerCase();
-    return variant.stock[branchKey] || 0;
+    
+    if (variantId) {
+      const variant = variants.find(v => v.id === variantId);
+      if (!variant || !variant.stock) return 0;
+      return variant.stock[branchKey] || 0;
+    } else {
+      const product = products.find(p => p.id === productId);
+      if (!product || product.hasVariants !== false || !product.stock) return 0;
+      return product.stock[branchKey] || 0;
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -99,14 +106,15 @@ export default function CreateTransferForm() {
 
     // Validate Items
     for (const item of items) {
-      if (!item.productId || !item.variantId || !item.quantity || Number(item.quantity) <= 0) {
-        toast.error('Please ensure all items have a product, variant, and valid quantity.');
+      const product = products.find(p => p.id === item.productId);
+      if (!item.productId || (product && product.hasVariants !== false && !item.variantId) || !item.quantity || Number(item.quantity) <= 0) {
+        toast.error('Please ensure all items have a valid product, variant (if applicable), and quantity.');
         return;
       }
-      const available = getAvailableStock(item.variantId);
+      const available = getAvailableStock(item.productId, item.variantId);
       if (Number(item.quantity) > available) {
-        const variant = variants.find(v => v.id === item.variantId);
-        toast.error(`Insufficient stock for ${variant?.name || 'an item'}. Available in ${transferData.sourceBranch}: ${available}`);
+        const itemName = item.variantId ? variants.find(v => v.id === item.variantId)?.name : product?.name;
+        toast.error(`Insufficient stock for ${itemName || 'an item'}. Available in ${transferData.sourceBranch}: ${available}`);
         return;
       }
     }
@@ -213,9 +221,13 @@ export default function CreateTransferForm() {
           ) : (
             <div className="space-y-4">
               {items.map((item, index) => {
+                const selectedProduct = products.find(p => p.id === item.productId);
                 const productVariants = variants.filter(v => v.productId === item.productId);
-                const availableStock = getAvailableStock(item.variantId);
-                const isOverStock = item.variantId && Number(item.quantity) > availableStock;
+                const hasVariants = selectedProduct ? selectedProduct.hasVariants !== false : true;
+                const availableStock = getAvailableStock(item.productId, item.variantId);
+                
+                // For a product with hasVariants false, if they typed a quantity > stock
+                const isOverStock = (item.variantId || !hasVariants) && Number(item.quantity) > availableStock;
 
                 return (
                   <div key={item.id} className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative">
@@ -247,27 +259,40 @@ export default function CreateTransferForm() {
                         </select>
                       </div>
 
-                      <div className="col-span-1 md:col-span-4 space-y-1">
-                        <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
-                        <select
-                          className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-                          value={item.variantId}
-                          onChange={e => handleItemChange(item.id, 'variantId', e.target.value)}
-                          required
-                          disabled={!item.productId}
-                        >
-                          <option value="">Select Variant...</option>
-                          {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
-                        </select>
-                        {item.variantId && (
+                      {hasVariants && (
+                        <div className="col-span-1 md:col-span-4 space-y-1">
+                          <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
+                          <select
+                            className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                            value={item.variantId}
+                            onChange={e => handleItemChange(item.id, 'variantId', e.target.value)}
+                            required
+                            disabled={!item.productId}
+                          >
+                            <option value="">Select Variant...</option>
+                            {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
+                          </select>
+                          {item.variantId && (
+                            <div className="text-xs mt-1 text-surface-500 flex justify-between">
+                              <span>Available:</span>
+                              <span className={availableStock > 0 ? 'text-success-600 font-bold' : 'text-danger-600 font-bold'}>
+                                {availableStock}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {!hasVariants && item.productId && (
+                        <div className="col-span-1 md:col-span-4 space-y-1 flex flex-col justify-center">
                           <div className="text-xs mt-1 text-surface-500 flex justify-between">
-                            <span>Available:</span>
-                            <span className={availableStock > 0 ? 'text-success-600 font-bold' : 'text-danger-600 font-bold'}>
-                              {availableStock}
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                              <span>Available in {transferData.sourceBranch}:</span>
+                              <span className={availableStock > 0 ? 'text-success-600 font-bold' : 'text-danger-600 font-bold'}>
+                                {availableStock}
+                              </span>
+                            </div>
+                        </div>
+                      )}
 
                       <div className="col-span-1 md:col-span-4">
                         <Input

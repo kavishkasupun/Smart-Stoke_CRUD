@@ -12,7 +12,7 @@ export const createDraftProductionOrder = async (productionData, userId) => {
   try {
     const { branch, finishedProductId, finishedVariantId, bomId, quantityProduced, materials, notes } = productionData;
 
-    if (!branch || !finishedVariantId || !quantityProduced || quantityProduced <= 0 || !materials || materials.length === 0) {
+    if (!branch || (!finishedVariantId && !finishedProductId) || !quantityProduced || quantityProduced <= 0 || !materials || materials.length === 0) {
       throw new Error("Missing required fields for production.");
     }
 
@@ -24,11 +24,12 @@ export const createDraftProductionOrder = async (productionData, userId) => {
       referenceId,
       branch,
       finishedProductId,
-      finishedVariantId,
+      finishedVariantId: finishedVariantId || null,
       bomId, // Record which version of the BOM was used
       quantityProduced: Number(quantityProduced),
       materialsRequired: materials.map(m => ({
-        variantId: m.variantId,
+        productId: m.productId,
+        variantId: m.variantId || null,
         quantityPerUnit: m.quantityPerUnit,
         totalRequired: m.totalRequired,
         availableAtCreation: m.availableAtCreation // Snapshot of stock at creation
@@ -98,6 +99,42 @@ export const getProductionOrderById = async (id) => {
 };
 
 /**
+ * Cancels a DRAFT Production Order.
+ */
+export const cancelProductionOrder = async (orderId, userId) => {
+  try {
+    const orderRef = doc(db, COLLECTIONS.PRODUCTIONS, orderId);
+    const orderSnap = await getDoc(orderRef);
+    
+    if (!orderSnap.exists()) {
+      throw new Error("Production order not found.");
+    }
+
+    if (orderSnap.data().status !== 'DRAFT') {
+      throw new Error("Only draft orders can be canceled.");
+    }
+
+    await setDoc(orderRef, {
+      status: 'CANCELED',
+      updatedAt: new Date().toISOString(),
+      updatedBy: userId
+    }, { merge: true });
+
+    await logAudit({
+      userId,
+      action: 'CANCEL_PRODUCTION',
+      entityType: 'Production',
+      entityId: orderId
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[ProductionService] Error canceling production:', error);
+    throw error;
+  }
+};
+
+/**
  * Confirms a DRAFT Production Order.
  * Executes a transaction to deduct raw materials and add finished goods.
  */
@@ -119,16 +156,22 @@ export const confirmProductionOrder = async (orderId, userId) => {
       const { branch, finishedProductId, finishedVariantId, quantityProduced, materialsRequired, referenceId } = orderData;
       const branchKey = branch.toLowerCase();
 
-      // 1. Fetch finished product variant
-      const finishedVariantRef = doc(db, COLLECTIONS.PRODUCT_VARIANTS, finishedVariantId);
-      const finishedSnap = await transaction.get(finishedVariantRef);
+      // 1. Fetch finished product stock doc
+      const finishedStockRef = finishedVariantId 
+        ? doc(db, COLLECTIONS.PRODUCT_VARIANTS, finishedVariantId)
+        : doc(db, COLLECTIONS.PRODUCTS, finishedProductId);
+      const finishedSnap = await transaction.get(finishedStockRef);
       if (!finishedSnap.exists()) {
-        throw new Error(`Finished variant ${finishedVariantId} not found.`);
+        throw new Error(`Finished stock document not found.`);
       }
       const finishedData = finishedSnap.data();
 
-      // 2. Fetch all raw material variants
-      const materialRefs = materialsRequired.map(m => doc(db, COLLECTIONS.PRODUCT_VARIANTS, m.variantId));
+      // 2. Fetch all raw material stock docs
+      const materialRefs = materialsRequired.map(m => 
+        m.variantId
+          ? doc(db, COLLECTIONS.PRODUCT_VARIANTS, m.variantId)
+          : doc(db, COLLECTIONS.PRODUCTS, m.productId)
+      );
       const materialSnaps = await Promise.all(materialRefs.map(ref => transaction.get(ref)));
 
       const updates = [];
@@ -141,7 +184,7 @@ export const confirmProductionOrder = async (orderId, userId) => {
         const snap = materialSnaps[i];
         
         if (!snap.exists()) {
-          throw new Error(`Required material variant ${req.variantId} not found.`);
+          throw new Error(`Required material stock doc not found.`);
         }
         
         const matData = snap.data();
@@ -166,8 +209,8 @@ export const confirmProductionOrder = async (orderId, userId) => {
         movements.push({
           type: 'PRODUCTION_MATERIAL_CONSUMPTION',
           referenceId,
-          productId: matData.productId,
-          variantId: req.variantId,
+          productId: req.productId || matData.productId, // req.productId added above
+          variantId: req.variantId || null,
           branch,
           quantity: deductQty,
           beforeQuantity: beforeQty,
@@ -176,7 +219,8 @@ export const confirmProductionOrder = async (orderId, userId) => {
         });
 
         consumedLog.push({
-          variantId: req.variantId,
+          productId: req.productId || matData.productId,
+          variantId: req.variantId || null,
           quantityConsumed: deductQty,
           beforeQuantity: beforeQty,
           afterQuantity: afterQty
@@ -189,7 +233,7 @@ export const confirmProductionOrder = async (orderId, userId) => {
       const finishedAfterQty = finishedBeforeQty + quantityProduced;
 
       updates.push({
-        ref: finishedVariantRef,
+        ref: finishedStockRef,
         stock: {
           ...currentFinishedStock,
           [branchKey]: finishedAfterQty,
@@ -201,7 +245,7 @@ export const confirmProductionOrder = async (orderId, userId) => {
         type: 'PRODUCTION_FINISHED_RECEIPT',
         referenceId,
         productId: finishedProductId,
-        variantId: finishedVariantId,
+        variantId: finishedVariantId || null,
         branch,
         quantity: quantityProduced,
         beforeQuantity: finishedBeforeQty,

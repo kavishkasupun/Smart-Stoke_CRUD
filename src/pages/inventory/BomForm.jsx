@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, Loader2, Layers, Eye } from 'lucide-react';
 import { Card, Button, Input, Badge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
-import { getBomById, saveBomVersion, getActiveBomByFinishedVariantId } from '../../services/bomService';
+import { getBomById, saveBomVersion, getActiveBomByFinishedProduct } from '../../services/bomService';
 import { getProducts, getProductVariants } from '../../services/productService';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -45,14 +45,31 @@ export default function BomForm() {
       
       setFinishedProducts(finishedGoods);
       
-      // Build a flat list of raw material variants for the dropdown
-      const rawVariants = allVariants.filter(v => rawGoods.some(p => p.id === v.productId));
-      const enrichedRawMaterials = rawVariants.map(v => {
-        const product = rawGoods.find(p => p.id === v.productId);
-        return {
-          ...v,
-          productName: product?.name || 'Unknown'
-        };
+      // Build a flat list of raw material options for the dropdown
+      const enrichedRawMaterials = [];
+      rawGoods.forEach(product => {
+        if (product.hasVariants === false) {
+           enrichedRawMaterials.push({
+              id: `prod_${product.id}`,
+              productId: product.id,
+              variantId: null,
+              productName: product.name,
+              name: product.name,
+              size: ''
+           });
+        } else {
+           const variants = allVariants.filter(v => v.productId === product.id);
+           variants.forEach(v => {
+              enrichedRawMaterials.push({
+                 id: `var_${v.id}`,
+                 productId: product.id,
+                 variantId: v.id,
+                 productName: product.name,
+                 name: v.name,
+                 size: v.size
+              });
+           });
+        }
       });
       setRawMaterials(enrichedRawMaterials);
 
@@ -68,8 +85,23 @@ export default function BomForm() {
             setAvailableVariants(varsForProd);
             
             setSelectedVariant(v.id);
+          } else {
+            // It could be a product without variants
+            const p = allProducts.find(prod => prod.id === bom.finishedProductId);
+            if (p) {
+               setSelectedProduct(p.id);
+               setAvailableVariants([]);
+               setSelectedVariant('');
+            }
           }
-          setMaterialsList(bom.materials || []);
+          
+          const mappedMaterials = (bom.materials || []).map(m => {
+            return {
+              ...m,
+              selectionId: m.variantId ? `var_${m.variantId}` : `prod_${m.productId}`
+            };
+          });
+          setMaterialsList(mappedMaterials);
           setCurrentVersion(bom.version || 0);
         } else {
           toast.error('BOM not found');
@@ -87,18 +119,39 @@ export default function BomForm() {
   // When a finished product is selected (in Create mode), find its variants
   useEffect(() => {
     if (selectedProduct && !isEditMode) {
-      getProductVariants(selectedProduct).then(variants => {
-        setAvailableVariants(variants);
+      const p = finishedProducts.find(prod => prod.id === selectedProduct);
+      if (p && p.hasVariants !== false) {
+        getProductVariants(selectedProduct).then(variants => {
+          setAvailableVariants(variants);
+          setSelectedVariant('');
+          setMaterialsList([]);
+        });
+      } else {
+        setAvailableVariants([]);
         setSelectedVariant('');
         setMaterialsList([]);
-      });
+        // Trigger the check for active BOM immediately for non-variant product
+        getActiveBomByFinishedProduct(selectedProduct, null).then(existing => {
+          if (existing) {
+            toast.warning('An active BOM already exists for this product. You will create a new version.');
+            setMaterialsList(existing.materials?.map(m => ({
+              ...m,
+              selectionId: m.variantId ? `var_${m.variantId}` : `prod_${m.productId}`
+            })) || []);
+            setCurrentVersion(existing.version || 0);
+          } else {
+            setMaterialsList([]);
+            setCurrentVersion(0);
+          }
+        });
+      }
     }
   }, [selectedProduct, isEditMode]);
 
   // When a variant is selected in create mode, check if there's already an active BOM
   useEffect(() => {
     if (selectedVariant && !isEditMode) {
-      getActiveBomByFinishedVariantId(selectedVariant).then(existing => {
+      getActiveBomByFinishedProduct(selectedProduct, selectedVariant).then(existing => {
         if (existing) {
           toast.warning('An active BOM already exists for this variant. You will create a new version.');
           setMaterialsList(existing.materials || []);
@@ -112,7 +165,7 @@ export default function BomForm() {
   }, [selectedVariant, isEditMode]);
 
   const addMaterialRow = () => {
-    setMaterialsList([...materialsList, { variantId: '', quantity: 1, unit: 'pcs' }]);
+    setMaterialsList([...materialsList, { selectionId: '', quantity: 1, unit: 'pcs' }]);
   };
 
   const updateMaterial = (index, field, value) => {
@@ -129,12 +182,16 @@ export default function BomForm() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!selectedVariant) return toast.error('Select a finished product variant first');
+    const p = finishedProducts.find(prod => prod.id === selectedProduct);
+    const hasVariants = p ? p.hasVariants !== false : true;
+    
+    if (hasVariants && !selectedVariant) return toast.error('Select a finished product variant first');
+    if (!selectedProduct) return toast.error('Select a finished product first');
     if (materialsList.length === 0) return toast.error('Add at least one raw material component');
     
     // Validate rows
     for (let m of materialsList) {
-      if (!m.variantId || !m.quantity || m.quantity <= 0) {
+      if (!m.selectionId || !m.quantity || m.quantity <= 0) {
         return toast.error('All components must have a selected item and valid positive quantity');
       }
     }
@@ -143,12 +200,16 @@ export default function BomForm() {
     try {
       const payload = {
         finishedProductId: selectedProduct,
-        finishedVariantId: selectedVariant,
-        materials: materialsList.map(m => ({
-          variantId: m.variantId,
-          quantity: Number(m.quantity),
-          unit: m.unit || 'pcs'
-        }))
+        finishedVariantId: selectedVariant || null,
+        materials: materialsList.map(m => {
+          const rawOption = rawMaterials.find(r => r.id === m.selectionId);
+          return {
+            productId: rawOption?.productId,
+            variantId: rawOption?.variantId || null,
+            quantity: Number(m.quantity),
+            unit: m.unit || 'pcs'
+          };
+        })
       };
 
       const result = await saveBomVersion(payload, userProfile.id);
@@ -164,8 +225,8 @@ export default function BomForm() {
 
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div>;
 
-  const getMaterialLabel = (variantId) => {
-    const rm = rawMaterials.find(r => r.id === variantId);
+  const getMaterialLabel = (selectionId) => {
+    const rm = rawMaterials.find(r => r.id === selectionId);
     if (!rm) return 'Unknown Material';
     return `${rm.productName} ${rm.size ? `- ${rm.size}` : ''}`;
   };
@@ -217,26 +278,28 @@ export default function BomForm() {
                   </select>
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-surface-700">Specific Variant / Size</label>
-                <div className="relative">
-                  <select
-                    value={selectedVariant}
-                    onChange={(e) => setSelectedVariant(e.target.value)}
-                    disabled={!selectedProduct || isEditMode || saving}
-                    className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 appearance-none disabled:bg-surface-50 disabled:text-surface-500"
-                  >
-                    <option value="">Select Variant...</option>
-                    {availableVariants.map(v => (
-                      <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>
-                    ))}
-                  </select>
+              {finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false && (
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-surface-700">Specific Variant / Size</label>
+                  <div className="relative">
+                    <select
+                      value={selectedVariant}
+                      onChange={(e) => setSelectedVariant(e.target.value)}
+                      disabled={!selectedProduct || isEditMode || saving}
+                      className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 appearance-none disabled:bg-surface-50 disabled:text-surface-500"
+                    >
+                      <option value="">Select Variant...</option>
+                      {availableVariants.map(v => (
+                        <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </Card>
 
-          {selectedVariant && (
+          {(selectedVariant || (selectedProduct && finishedProducts.find(p => p.id === selectedProduct)?.hasVariants === false)) && (
             <Card className="p-6">
               <div className="flex justify-between items-center mb-4 border-b border-surface-200 pb-2">
                 <h3 className="text-lg font-bold text-surface-900">Components (Recipe)</h3>
@@ -262,14 +325,14 @@ export default function BomForm() {
                     <div key={idx} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-surface-50 p-3 rounded-lg border border-surface-200">
                       <div className="flex-1 w-full relative">
                         <select
-                          value={mat.variantId}
-                          onChange={(e) => updateMaterial(idx, 'variantId', e.target.value)}
+                          value={mat.selectionId}
+                          onChange={(e) => updateMaterial(idx, 'selectionId', e.target.value)}
                           disabled={saving}
                           className="w-full px-3 py-2 bg-white border border-surface-300 rounded-lg text-sm appearance-none focus:ring-2 focus:ring-primary-500 disabled:bg-surface-50"
                         >
                           <option value="">Select Raw Material...</option>
                           {rawMaterials.map(rm => (
-                            <option key={rm.id} value={rm.id}>{rm.productName} {rm.size ? `(${rm.size})` : ''}</option>
+                            <option key={rm.id} value={rm.id}>{rm.productName} {rm.name && rm.name !== rm.productName ? `- ${rm.name}` : ''} {rm.size ? `(${rm.size})` : ''}</option>
                           ))}
                         </select>
                       </div>
@@ -320,7 +383,7 @@ export default function BomForm() {
                   onClick={handleSave}
                   isLoading={saving}
                   icon={<Save className="w-4 h-4" />}
-                  disabled={!selectedVariant || materialsList.length === 0}
+                  disabled={(!selectedVariant && finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false) || materialsList.length === 0}
                 >
                   Save BOM Version {currentVersion + 1}
                 </Button>
@@ -331,7 +394,7 @@ export default function BomForm() {
 
         {/* Right Preview Panel */}
         <div className="lg:col-span-1">
-          {selectedVariant && (
+          {(selectedVariant || finishedProducts.find(p => p.id === selectedProduct)?.hasVariants === false) && (
             <Card className="p-6 sticky top-6">
               <h3 className="text-lg font-bold text-surface-900 mb-4 flex items-center gap-2 border-b border-surface-200 pb-2">
                 <Eye className="w-5 h-5 text-primary-600" />
@@ -342,7 +405,10 @@ export default function BomForm() {
                 <p className="text-sm text-primary-900 font-medium leading-relaxed">
                   To manufacture <strong className="font-bold">1 unit</strong> of <br/>
                   <span className="text-lg text-primary-700">
-                    {availableVariants.find(v => v.id === selectedVariant)?.name} {availableVariants.find(v => v.id === selectedVariant)?.size ? `(${availableVariants.find(v => v.id === selectedVariant)?.size})` : ''}
+                    {finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false 
+                      ? `${availableVariants.find(v => v.id === selectedVariant)?.name} ${availableVariants.find(v => v.id === selectedVariant)?.size ? `(${availableVariants.find(v => v.id === selectedVariant)?.size})` : ''}`
+                      : finishedProducts.find(p => p.id === selectedProduct)?.name
+                    }
                   </span>
                   <br/>you require:
                 </p>
@@ -352,9 +418,9 @@ export default function BomForm() {
                 <p className="text-sm text-surface-500 italic">No components added yet.</p>
               ) : (
                 <ul className="space-y-3">
-                  {materialsList.map((m, idx) => m.variantId && (
+                  {materialsList.map((m, idx) => m.selectionId && (
                     <li key={idx} className="flex justify-between items-center text-sm">
-                      <span className="text-surface-700">{getMaterialLabel(m.variantId)}</span>
+                      <span className="text-surface-700">{getMaterialLabel(m.selectionId)}</span>
                       <span className="font-mono font-medium text-surface-900">
                         {m.quantity} {m.unit}
                       </span>

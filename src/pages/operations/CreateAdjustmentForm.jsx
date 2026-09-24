@@ -67,11 +67,18 @@ export default function CreateAdjustmentForm() {
   };
 
   const getAvailableStock = () => {
-    if (!formData.branch || !formData.variantId) return null;
-    const variant = variants.find(v => v.id === formData.variantId);
-    if (!variant || !variant.stock) return 0;
+    if (!formData.branch || !formData.productId) return null;
     const branchKey = formData.branch.toLowerCase();
-    return variant.stock[branchKey] || 0;
+    
+    if (formData.variantId) {
+      const variant = variants.find(v => v.id === formData.variantId);
+      if (!variant || !variant.stock) return 0;
+      return variant.stock[branchKey] || 0;
+    } else {
+      const product = products.find(p => p.id === formData.productId);
+      if (!product || product.hasVariants !== false || !product.stock) return 0;
+      return product.stock[branchKey] || 0;
+    }
   };
 
   const currentStock = getAvailableStock();
@@ -82,7 +89,10 @@ export default function CreateAdjustmentForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.branch || !formData.variantId || formData.adjustQty === '' || !formData.type) {
+    const selectedProduct = products.find(p => p.id === formData.productId);
+    const hasVariants = selectedProduct ? selectedProduct.hasVariants !== false : true;
+
+    if (!formData.branch || !formData.productId || (hasVariants && !formData.variantId) || formData.adjustQty === '' || !formData.type) {
       toast.error('Please fill in all required fields.');
       return;
     }
@@ -124,6 +134,8 @@ export default function CreateAdjustmentForm() {
     return <div className="flex justify-center p-12"><Spinner size="lg" /></div>;
   }
 
+  const selectedProduct = products.find(p => p.id === formData.productId);
+  const hasVariants = selectedProduct ? selectedProduct.hasVariants !== false : true;
   const productVariants = variants.filter(v => v.productId === formData.productId);
 
   return (
@@ -187,19 +199,21 @@ export default function CreateAdjustmentForm() {
               </select>
             </div>
 
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-surface-700">Variant/Size *</label>
-              <select
-                className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-                value={formData.variantId}
-                onChange={e => setFormData({...formData, variantId: e.target.value})}
-                required
-                disabled={!formData.productId}
-              >
-                <option value="">Select Variant</option>
-                {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
-              </select>
-            </div>
+            {hasVariants && (
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-surface-700">Variant/Size *</label>
+                <select
+                  className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                  value={formData.variantId}
+                  onChange={e => setFormData({...formData, variantId: e.target.value})}
+                  required
+                  disabled={!formData.productId}
+                >
+                  <option value="">Select Variant</option>
+                  {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="p-4 bg-surface-50 border border-surface-200 rounded-xl">

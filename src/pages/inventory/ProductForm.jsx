@@ -21,6 +21,13 @@ export default function ProductForm() {
     brand: '',
     description: '',
     productType: 'FINISHED_PRODUCT',
+    hasVariants: true,
+    sku: '',
+    barcode: '',
+    costPrice: '',
+    sellingPrice: '',
+    reorderLevel: '',
+    minimumStockLevel: '',
     active: true
   });
   
@@ -49,7 +56,14 @@ export default function ProductForm() {
             brand: product.brand || '',
             description: product.description || '',
             productType: product.productType || 'FINISHED_PRODUCT',
-            active: product.active
+            hasVariants: product.hasVariants !== false, // Default to true for old records
+            sku: product.sku || '',
+            barcode: product.barcode || '',
+            costPrice: product.costPrice || '',
+            sellingPrice: product.sellingPrice || '',
+            reorderLevel: product.reorderLevel || '',
+            minimumStockLevel: product.minimumStockLevel || '',
+            active: product.active !== false
           });
         } else {
           setError('Product not found');
@@ -87,9 +101,20 @@ export default function ProductForm() {
         toast.success('Product updated successfully!');
         navigate(`/products/${id}`);
       } else {
-        const newProduct = await addProduct(formData, userProfile.id);
+        const newProduct = await addProduct({
+          ...formData,
+          // Only send pricing/sku if hasVariants is false
+          ...(formData.hasVariants === false ? {
+            sku: formData.sku,
+            barcode: formData.barcode,
+            costPrice: Number(formData.costPrice) || 0,
+            sellingPrice: Number(formData.sellingPrice) || 0,
+            reorderLevel: Number(formData.reorderLevel) || 0,
+            minimumStockLevel: Number(formData.minimumStockLevel) || 0
+          } : {})
+        }, userProfile.id);
         toast.success('Product added successfully!');
-        // After creating a product, immediately take them to details page to add variants
+        // After creating a product, take them to details page
         navigate(`/products/${newProduct.id}`);
       }
     } catch (err) {
@@ -197,6 +222,92 @@ export default function ProductForm() {
               onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
               disabled={submitting}
             />
+
+            <div className="space-y-1.5 md:col-span-2">
+              <label className="block text-sm font-medium text-surface-700">
+                Product Architecture <span className="text-danger-500">*</span>
+              </label>
+              <div className="flex gap-4 items-center bg-surface-50 p-4 rounded-lg border border-surface-200">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="hasVariants"
+                    checked={formData.hasVariants === true}
+                    onChange={() => setFormData({ ...formData, hasVariants: true })}
+                    disabled={isEditMode || submitting}
+                    className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm font-medium text-surface-900">This product has variants/sizes</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="hasVariants"
+                    checked={formData.hasVariants === false}
+                    onChange={() => setFormData({ ...formData, hasVariants: false })}
+                    disabled={isEditMode || submitting}
+                    className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm font-medium text-surface-900">No variants (e.g. Packing Tape)</span>
+                </label>
+              </div>
+              {isEditMode && (
+                <p className="text-xs text-surface-500">Variant architecture cannot be changed after creation.</p>
+              )}
+            </div>
+
+            {formData.hasVariants === false && (
+              <>
+                <Input
+                  label="SKU"
+                  placeholder="Auto-generated if empty"
+                  value={formData.sku}
+                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Barcode"
+                  placeholder="Scan or type barcode"
+                  value={formData.barcode}
+                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Cost Price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.costPrice}
+                  onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Selling Price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.sellingPrice}
+                  onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Reorder Level"
+                  type="number"
+                  min="0"
+                  value={formData.reorderLevel}
+                  onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
+                  disabled={submitting}
+                />
+                <Input
+                  label="Minimum Stock Level"
+                  type="number"
+                  min="0"
+                  value={formData.minimumStockLevel}
+                  onChange={(e) => setFormData({ ...formData, minimumStockLevel: e.target.value })}
+                  disabled={submitting}
+                />
+              </>
+            )}
           </div>
 
           <div className="space-y-1.5">

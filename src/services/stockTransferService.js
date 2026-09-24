@@ -33,7 +33,7 @@ export const createTransfer = async (transferData, items, userId) => {
       totalItems: items.length,
       items: items.map(item => ({
         productId: item.productId,
-        variantId: item.variantId,
+        variantId: item.variantId || null,
         quantity: Number(item.quantity)
       }))
     }, userId);
@@ -82,23 +82,27 @@ export const completeTransfer = async (referenceId, userId) => {
       const destKey = transferData.destinationBranch.toLowerCase();
       const items = transferData.items;
 
-      // 2. Read Variant Docs
-      const variantRefs = items.map(item => doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId));
-      const variantSnaps = await Promise.all(variantRefs.map(ref => transaction.get(ref)));
+      // 2. Read Stock Docs
+      const stockRefs = items.map(item => 
+        item.variantId 
+          ? doc(db, COLLECTIONS.PRODUCT_VARIANTS, item.variantId)
+          : doc(db, COLLECTIONS.PRODUCTS, item.productId)
+      );
+      const stockSnaps = await Promise.all(stockRefs.map(ref => transaction.get(ref)));
 
-      const variantUpdates = [];
+      const stockUpdates = [];
 
       // 3. Validate Stock and Prepare Updates
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const variantSnap = variantSnaps[i];
+        const stockSnap = stockSnaps[i];
 
-        if (!variantSnap.exists()) {
-          throw new Error(`Variant ${item.variantId} does not exist anymore.`);
+        if (!stockSnap.exists()) {
+          throw new Error(`Stock document for ${item.variantId ? 'variant' : 'product'} does not exist anymore.`);
         }
 
-        const variantData = variantSnap.data();
-        const currentStock = variantData.stock || { mabola: 0, jaffna: 0, overall: 0 };
+        const stockData = stockSnap.data();
+        const currentStock = stockData.stock || { mabola: 0, jaffna: 0, overall: 0 };
         
         const sourceBeforeQty = currentStock[sourceKey] || 0;
         if (sourceBeforeQty < item.quantity) {
@@ -114,11 +118,11 @@ export const completeTransfer = async (referenceId, userId) => {
           // Note: overall stock remains the same
         };
 
-        variantUpdates.push({
-          ref: variantRefs[i],
-          variantId: item.variantId,
-          name: variantData.name,
-          minStock: variantData.minimumStockLevel || 0,
+        stockUpdates.push({
+          ref: stockRefs[i],
+          variantId: item.variantId || null,
+          name: stockData.name,
+          minStock: stockData.minimumStockLevel || 0,
           data: { stock: newStock },
           sourceBeforeQty,
           sourceAfterQty: newStock[sourceKey],
@@ -129,14 +133,14 @@ export const completeTransfer = async (referenceId, userId) => {
 
       // 4. Perform Writes
       
-      // Update variants
-      variantUpdates.forEach(update => {
+      // Update stock docs
+      stockUpdates.forEach(update => {
         transaction.update(update.ref, update.data);
       });
 
       // Create Stock Movements (2 for each item: OUT and IN)
       items.forEach((item, index) => {
-        const update = variantUpdates[index];
+        const update = stockUpdates[index];
         
         // TRANSFER_OUT (Source)
         const outRef = doc(collection(db, COLLECTIONS.STOCK_MOVEMENTS));
@@ -144,7 +148,7 @@ export const completeTransfer = async (referenceId, userId) => {
           type: 'TRANSFER_OUT',
           referenceId: referenceId,
           productId: item.productId,
-          variantId: item.variantId,
+          variantId: item.variantId || null,
           branch: transferData.sourceBranch,
           quantity: Number(item.quantity),
           beforeQuantity: update.sourceBeforeQty,
@@ -158,7 +162,7 @@ export const completeTransfer = async (referenceId, userId) => {
           type: 'TRANSFER_IN',
           referenceId: referenceId,
           productId: item.productId,
-          variantId: item.variantId,
+          variantId: item.variantId || null,
           branch: transferData.destinationBranch,
           quantity: Number(item.quantity),
           beforeQuantity: update.destBeforeQty,
@@ -170,7 +174,7 @@ export const completeTransfer = async (referenceId, userId) => {
       // Update Transfer Status
       transaction.update(transferRef, withUpdateData({ status: 'COMPLETED' }, userId));
 
-      return { transferData, variantUpdates };
+      return { transferData, stockUpdates };
     });
     
     await logAudit({
@@ -181,9 +185,9 @@ export const completeTransfer = async (referenceId, userId) => {
     });
 
     // Trigger low stock notifications for the source branch (non-blocking)
-    if (result.variantUpdates && result.variantUpdates.length > 0) {
-      const notificationPayloads = result.variantUpdates.map(u => ({
-        variantId: u.variantId,
+    if (result.stockUpdates && result.stockUpdates.length > 0) {
+      const notificationPayloads = result.stockUpdates.map(u => ({
+        variantId: u.variantId || null, // null means it's a product
         name: u.name,
         branch: result.transferData.sourceBranch,
         beforeStock: u.sourceBeforeQty,

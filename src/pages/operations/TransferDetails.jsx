@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Calendar, User, Package, CheckCircle, XCircle } from 'lucide-react';
+import { useRef } from 'react';
+import html2pdf from 'html2pdf.js';
+import { ArrowLeft, ArrowRight, Calendar, User, Package, CheckCircle, XCircle, Download } from 'lucide-react';
 import { Card, Button, Table, Spinner, Badge } from '../../components/ui';
 import { getTransferDetails, completeTransfer, cancelTransfer } from '../../services/stockTransferService';
 import { getProductById, getProductVariants } from '../../services/productService';
@@ -21,8 +23,22 @@ export default function TransferDetails() {
   const [actionLoading, setActionLoading] = useState(false);
   const [data, setData] = useState(null);
   const [enrichedItems, setEnrichedItems] = useState([]);
+  const contentRef = useRef(null);
 
   const canManage = canManageInventory(userProfile?.role);
+
+  const handleDownloadPDF = () => {
+    const element = contentRef.current;
+    if (!element) return;
+    const opt = {
+      margin: 10,
+      filename: `transfer_${data.referenceId}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
 
   useEffect(() => {
     fetchDetails();
@@ -39,13 +55,15 @@ export default function TransferDetails() {
         // Enrich items with product and variant names
         const enriched = await Promise.all(res.items.map(async (item) => {
           let pName = 'Unknown Product';
-          let vName = 'Unknown Variant';
+          let vName = null;
           try {
             const prod = await getProductById(item.productId);
             if (prod) pName = prod.name;
-            const vars = await getProductVariants(item.productId);
-            const variant = vars.find(v => v.id === item.variantId);
-            if (variant) vName = variant.size ? `${variant.name} (${variant.size})` : variant.name;
+            if (item.variantId) {
+              const vars = await getProductVariants(item.productId);
+              const variant = vars.find(v => v.id === item.variantId);
+              if (variant) vName = variant.size ? `${variant.name} (${variant.size})` : variant.name;
+            }
           } catch (e) {
             console.error('Failed to enrich names for item', item.productId);
           }
@@ -134,7 +152,7 @@ export default function TransferDetails() {
       render: (val, row) => (
         <div>
           <div className="font-medium text-surface-900">{val}</div>
-          <div className="text-xs text-surface-500">{row.variantName}</div>
+          {row.variantName && <div className="text-xs text-surface-500">{row.variantName}</div>}
         </div>
       )
     },
@@ -159,6 +177,7 @@ export default function TransferDetails() {
           <p className="text-sm text-surface-500 mt-1">Ref: {data.referenceId}</p>
         </div>
         <div className="ml-auto flex items-center gap-4">
+          <Button variant="outline" icon={<Download className="w-4 h-4" />} onClick={handleDownloadPDF}>PDF</Button>
           {getStatusBadge(data.status)}
           
           {data.status === 'PENDING' && canManage && (
@@ -184,6 +203,7 @@ export default function TransferDetails() {
         </div>
       </div>
 
+      <div ref={contentRef} className="space-y-6 bg-white p-2">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4 flex items-center gap-4 md:col-span-2">
           <div className="flex-1 flex flex-col items-center">
@@ -236,6 +256,7 @@ export default function TransferDetails() {
           emptyMessage="No items found."
         />
       </Card>
+      </div>
     </div>
   );
 }

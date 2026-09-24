@@ -125,7 +125,7 @@ export default function ReportsDashboard() {
             {/* Sales Trend */}
             <Card className="p-5 flex flex-col h-[400px]">
               <h2 className="text-lg font-bold text-surface-900 mb-6">Sales Trend</h2>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="h-[300px] w-full">
                 {data.charts.salesTrend.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={data.charts.salesTrend} margin={{ top: 5, right: 20, left: 20, bottom: 25 }}>
@@ -158,7 +158,7 @@ export default function ReportsDashboard() {
             {/* Branch Comparison */}
             <Card className="p-5 flex flex-col h-[400px]">
               <h2 className="text-lg font-bold text-surface-900 mb-6">Revenue by Branch</h2>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={data.charts.branchComparison} margin={{ top: 5, right: 5, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -189,7 +189,7 @@ export default function ReportsDashboard() {
             {/* Top Variants */}
             <Card className="p-5 flex flex-col h-[400px]">
               <h2 className="text-lg font-bold text-surface-900 mb-6">Top 5 Selling Variants</h2>
-              <div className="flex-1 min-h-0 w-full">
+              <div className="h-[300px] w-full">
                 {data.charts.topVariants.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.charts.topVariants} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
@@ -209,7 +209,7 @@ export default function ReportsDashboard() {
             {/* Stock Movement IN vs OUT */}
             <Card className="p-5 flex flex-col h-[400px]">
               <h2 className="text-lg font-bold text-surface-900 mb-6">Stock Movement Distribution</h2>
-              <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+              <div className="h-[250px] w-full flex items-center justify-center">
                 {data.charts.movementChart[0].value > 0 || data.charts.movementChart[1].value > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>

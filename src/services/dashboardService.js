@@ -28,14 +28,37 @@ export const fetchAllActiveVariants = async (forceRefresh = false) => {
  */
 export const getInventoryStats = async (forceRefresh = false) => {
   try {
-    // 1. Fetch total products count
+    // 1. Fetch total products and build map for product types
     const productsRef = collection(db, COLLECTIONS.PRODUCTS);
     const productsQuery = query(productsRef, where('active', '==', true));
-    const productsCountSnap = await getCountFromServer(productsQuery);
-    const totalProducts = productsCountSnap.data().count;
+    const productsSnapshot = await getDocs(productsQuery);
+    
+    const totalProducts = productsSnapshot.docs.length;
+    const productsMap = {};
+    const noVariantProducts = [];
+    
+    productsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      productsMap[doc.id] = data;
+      
+      // If product has no variants, treat it as a stock item itself
+      if (data.hasVariants === false) {
+        noVariantProducts.push({
+          id: doc.id,
+          productId: doc.id, // For product lookup
+          name: data.name,
+          stock: data.stock || { overall: 0, mabola: 0, jaffna: 0 },
+          reorderLevel: data.reorderLevel || 0,
+          isBaseProduct: true
+        });
+      }
+    });
 
     // 2. Fetch all active variants
     const variants = await fetchAllActiveVariants(forceRefresh);
+    
+    // Combine variants and base products without variants
+    const allStockItems = [...variants, ...noVariantProducts];
     
     // 3. Compute stats in memory (Fallback since Cloud Functions aren't deployed)
     let totalVariants = variants.length;
@@ -44,13 +67,17 @@ export const getInventoryStats = async (forceRefresh = false) => {
     let overallStock = 0;
     let outOfStockCount = 0;
     let lowStockCount = 0;
-    const chartDataMap = {};
+    const chartDataFinishedMap = {};
+    const chartDataRawMap = {};
 
-    variants.forEach(v => {
-      const oStock = parseFloat(v.stock?.overall || 0) || 0;
-      const mStock = parseFloat(v.stock?.mabola || 0) || 0;
-      const jStock = parseFloat(v.stock?.jaffna || 0) || 0;
-      const reorder = parseFloat(v.reorderLevel || 0) || 0;
+    allStockItems.forEach(item => {
+      const oStock = parseFloat(item.stock?.overall || 0) || 0;
+      const mStock = parseFloat(item.stock?.mabola || 0) || 0;
+      const jStock = parseFloat(item.stock?.jaffna || 0) || 0;
+      
+      // Determine reorder level: use item's, fallback to product's, fallback to 0
+      const product = productsMap[item.productId || item.id];
+      const reorder = parseFloat(item.reorderLevel || (product && product.reorderLevel) || 0) || 0;
 
       overallStock += oStock;
       mabolaStock += mStock;
@@ -62,15 +89,24 @@ export const getInventoryStats = async (forceRefresh = false) => {
         lowStockCount++;
       }
 
-      if (v.name) {
-        if (!chartDataMap[v.name]) {
-          chartDataMap[v.name] = { name: v.name, stock: 0 };
-        }
-        chartDataMap[v.name].stock += oStock;
+      // Group chart data by product name instead of variant name to be more meaningful, 
+      // or use variant name if product is not found.
+      const groupName = product ? product.name : (item.name || 'Unknown');
+      const pType = product ? product.productType : 'FINISHED_PRODUCT';
+
+      const targetMap = pType === 'RAW_MATERIAL' ? chartDataRawMap : chartDataFinishedMap;
+
+      if (!targetMap[groupName]) {
+        targetMap[groupName] = { name: groupName, stock: 0 };
       }
+      targetMap[groupName].stock += oStock;
     });
 
-    const chartData = Object.values(chartDataMap)
+    const chartDataFinished = Object.values(chartDataFinishedMap)
+      .sort((a, b) => b.stock - a.stock)
+      .slice(0, 15);
+      
+    const chartDataRaw = Object.values(chartDataRawMap)
       .sort((a, b) => b.stock - a.stock)
       .slice(0, 15);
 
@@ -82,7 +118,8 @@ export const getInventoryStats = async (forceRefresh = false) => {
       overallStock,
       outOfStockCount,
       lowStockCount,
-      chartData
+      chartDataFinished,
+      chartDataRaw
     };
   } catch (error) {
     console.error('[DashboardService] Error fetching inventory stats:', error);
@@ -95,10 +132,32 @@ export const getInventoryStats = async (forceRefresh = false) => {
  */
 export const getLowStockVariants = async () => {
   try {
-    const allVariants = await fetchAllActiveVariants();
-    return allVariants.filter(v => {
-      const overall = parseFloat(v.stock?.overall || 0) || 0;
-      const reorder = parseFloat(v.reorderLevel || 0) || 0;
+    const productsRef = collection(db, COLLECTIONS.PRODUCTS);
+    const productsSnapshot = await getDocs(query(productsRef, where('active', '==', true)));
+    const productsMap = {};
+    const noVariantProducts = [];
+    
+    productsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      productsMap[doc.id] = data;
+      if (data.hasVariants === false) {
+        noVariantProducts.push({
+          id: doc.id,
+          productId: doc.id,
+          name: data.name,
+          stock: data.stock,
+          reorderLevel: data.reorderLevel
+        });
+      }
+    });
+
+    const variants = await fetchAllActiveVariants();
+    const allStockItems = [...variants, ...noVariantProducts];
+    
+    return allStockItems.filter(item => {
+      const overall = parseFloat(item.stock?.overall || 0) || 0;
+      const product = productsMap[item.productId || item.id];
+      const reorder = parseFloat(item.reorderLevel || (product && product.reorderLevel) || 0) || 0;
       return overall > 0 && overall <= reorder;
     });
   } catch (error) {
@@ -112,9 +171,27 @@ export const getLowStockVariants = async () => {
  */
 export const getOutOfStockVariants = async () => {
   try {
-    const allVariants = await fetchAllActiveVariants();
-    return allVariants.filter(v => {
-      const overall = parseFloat(v.stock?.overall || 0) || 0;
+    const productsRef = collection(db, COLLECTIONS.PRODUCTS);
+    const productsSnapshot = await getDocs(query(productsRef, where('active', '==', true)));
+    const noVariantProducts = [];
+    
+    productsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.hasVariants === false) {
+        noVariantProducts.push({
+          id: doc.id,
+          productId: doc.id,
+          name: data.name,
+          stock: data.stock
+        });
+      }
+    });
+
+    const variants = await fetchAllActiveVariants();
+    const allStockItems = [...variants, ...noVariantProducts];
+    
+    return allStockItems.filter(item => {
+      const overall = parseFloat(item.stock?.overall || 0) || 0;
       return overall === 0;
     });
   } catch (error) {

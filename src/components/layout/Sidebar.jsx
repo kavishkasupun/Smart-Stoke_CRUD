@@ -4,7 +4,7 @@ import { cn } from '../../utils/cn';
 import { useSidebar } from '../../contexts/SidebarContext';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { NAV_SECTIONS } from '../../config/navigation';
-import { APP_NAME } from '../../config/constants';
+import { APP_NAME, CREATE_BY } from '../../config/constants';
 import { X, Package, ChevronDown, Sparkles } from 'lucide-react';
 
 /**
@@ -180,10 +180,10 @@ export function Sidebar() {
               </div>
               <div className="flex-1">
                 <p className="text-[11px] font-bold text-slate-300 leading-tight">
-                  {APP_NAME}
+                  {CREATE_BY}
                 </p>
                 <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
-                  v2.0 · © 2026
+                  {APP_NAME} © {new Date().getFullYear()}
                 </p>
               </div>
             </div>

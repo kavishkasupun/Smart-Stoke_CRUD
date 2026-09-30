@@ -5,14 +5,16 @@ import { Card, Button, Input, Badge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProducts, getProductVariants } from '../../services/productService';
 import { getActiveBomByFinishedProduct } from '../../services/bomService';
-import { createDraftProductionOrder } from '../../services/productionService';
+import { createDraftProductionOrder, confirmProductionOrder } from '../../services/productionService';
 import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 export default function ProductionForm() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
   const branch = userProfile?.branchId; 
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -156,7 +158,7 @@ export default function ProductionForm() {
 
   }, [quantity, bomMaterials, selectedBranch]);
 
-  const handleSaveDraft = async (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     const p = finishedProducts.find(prod => prod.id === selectedProduct);
     const hasVariants = p ? p.hasVariants !== false : true;
@@ -166,6 +168,15 @@ export default function ProductionForm() {
     if (quantity <= 0) return toast.error('Invalid quantity');
     if (!activeBom) return toast.error('No BOM found for this product');
     if (hasShortage) return toast.error('Cannot create order with raw material shortages');
+
+    const isConfirmed = await confirm({
+      title: 'Complete Production Order',
+      message: `Are you sure you want to complete production for ${quantity} units? This will immediately deduct raw materials and add finished goods to stock.`,
+      confirmText: 'Complete Production',
+      type: 'info'
+    });
+
+    if (!isConfirmed) return;
 
     setSaving(true);
     try {
@@ -185,14 +196,20 @@ export default function ProductionForm() {
         }))
       };
 
+      toast.showLoading('Creating Production Order...');
       const result = await createDraftProductionOrder(payload, userProfile.id);
-      toast.success(`Production Order ${result.referenceId} saved as DRAFT.`);
+      
+      toast.showLoading('Confirming and Updating Stock...');
+      await confirmProductionOrder(result.id, userProfile.id, quantity);
+      
+      toast.success(`Production Order ${result.referenceId} COMPLETED successfully!`);
       navigate(`/manufacturing/${result.id}`);
     } catch (error) {
       console.error(error);
-      toast.error(error.message || 'Failed to save production order');
+      toast.error(error.message || 'Failed to save and complete production order');
     } finally {
       setSaving(false);
+      toast.hideLoading();
     }
   };
 
@@ -210,9 +227,9 @@ export default function ProductionForm() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-surface-900">New Production Order</h1>
-            <Badge variant="warning">Draft Mode</Badge>
+            <Badge variant="success">Direct Complete Mode</Badge>
           </div>
-          <p className="text-sm text-surface-500 mt-1">Plan a manufacturing run and check material availability.</p>
+          <p className="text-sm text-surface-500 mt-1">Plan and execute a manufacturing run immediately.</p>
         </div>
       </div>
 
@@ -296,13 +313,13 @@ export default function ProductionForm() {
               </div>
 
               <Button
-                onClick={handleSaveDraft}
+                onClick={handleSave}
                 isLoading={saving}
                 icon={<Save className="w-4 h-4" />}
                 disabled={(!selectedVariant && finishedProducts.find(p => p.id === selectedProduct)?.hasVariants !== false) || !activeBom || hasShortage || quantity <= 0}
                 className="w-full"
               >
-                Save Draft Order
+                Complete Production
               </Button>
             </div>
           </Card>

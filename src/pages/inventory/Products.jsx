@@ -66,20 +66,48 @@ export default function Products() {
   }, [products, debouncedSearch, selectedCategory]);
 
   const handleDelete = async (id) => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+    
+    let totalStock = 0;
+    if (product.hasVariants === false) {
+      totalStock = parseFloat(product.stock?.overall || 0) || 0;
+    } else {
+      toast.showLoading('Checking stock...');
+      try {
+        const { getProductVariants } = await import('../../services/productService');
+        const variants = await getProductVariants(id);
+        totalStock = variants.reduce((sum, v) => sum + (parseFloat(v.stock?.overall || 0) || 0), 0);
+      } catch (err) {
+        console.error(err);
+      }
+      toast.hideLoading();
+    }
+
+    let message = 'Are you sure you want to delete this product? This action cannot be undone.';
+    if (totalStock > 0) {
+      message = `This product currently has ${totalStock} units in stock! Deleting it will PERMANENTLY DELETE all associated stock records and variants. Are you sure you want to proceed?`;
+    } else if (product.hasVariants !== false) {
+      message = `Deleting this product will also delete all of its variants. Are you sure you want to proceed?`;
+    }
+
     const isConfirmed = await confirm({
       title: 'Delete Product',
-      message: 'Are you sure you want to delete this product? This action cannot be undone.',
+      message: message,
       confirmText: 'Delete',
       type: 'danger'
     });
 
     if (isConfirmed) {
       try {
+        toast.showLoading('Deleting Product...');
         await deleteProduct(id);
-        toast.success('Product deleted successfully!');
+        toast.success('Product and its stock deleted successfully!');
         fetchData();
       } catch (err) {
         toast.error('Failed to delete product.');
+      } finally {
+        toast.hideLoading();
       }
     }
   };

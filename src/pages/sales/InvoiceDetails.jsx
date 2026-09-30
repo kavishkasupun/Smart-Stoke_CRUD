@@ -12,7 +12,7 @@ export default function InvoiceDetails() {
   const navigate = useNavigate();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showLogo, setShowLogo] = useState(true);
+  const [showLogo, setShowLogo] = useState(false);
   const printRef = useRef(null);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function InvoiceDetails() {
       filename:     `Invoice_${invoice.invoiceNumber}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      jsPDF:        { unit: 'mm', format: 'a5', orientation: 'portrait' }
     };
 
     html2pdf().set(opt).from(element).save();

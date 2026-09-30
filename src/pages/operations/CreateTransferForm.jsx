@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Send } from 'lucide-react';
-import { Card, Button, Input, Spinner, Badge } from '../../components/ui';
+import { Plus, Trash2, ArrowLeft, Send, Layers } from 'lucide-react';
+import { Card, Button, Input, Spinner, Badge, Modal } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { getProducts, getProductVariants } from '../../services/productService';
 import { createTransfer } from '../../services/stockTransferService';
+import { getActiveBoms } from '../../services/bomService';
 import { BRANCHES } from '../../config/constants';
 
 export default function CreateTransferForm() {
@@ -19,6 +20,12 @@ export default function CreateTransferForm() {
   const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState([]);
   const [variants, setVariants] = useState([]);
+  const [boms, setBoms] = useState([]);
+
+  // BOM Modal State
+  const [isBomModalOpen, setIsBomModalOpen] = useState(false);
+  const [selectedBomId, setSelectedBomId] = useState('');
+  const [bomQuantity, setBomQuantity] = useState('');
 
   // Form State
   const [transferData, setTransferData] = useState({
@@ -38,12 +45,14 @@ export default function CreateTransferForm() {
   const fetchInventoryData = async () => {
     try {
       setLoading(true);
-      const [prodData, varData] = await Promise.all([
+      const [prodData, varData, bomsData] = await Promise.all([
         getProducts({ activeOnly: true }),
-        getProductVariants() // Fetches all active variants
+        getProductVariants(), // Fetches all active variants
+        getActiveBoms()
       ]);
       setProducts(prodData);
       setVariants(varData.filter(v => v.active));
+      setBoms(bomsData);
     } catch (error) {
       toast.error('Failed to load inventory data');
     } finally {
@@ -73,7 +82,39 @@ export default function CreateTransferForm() {
   const removeItem = (id) => {
     if (items.length > 1) {
       setItems(items.filter(item => item.id !== id));
+    } else {
+      setItems([{ id: Date.now(), productId: '', variantId: '', quantity: '' }]);
     }
+  };
+
+  const handleAddFromBom = () => {
+    if (!selectedBomId || !bomQuantity || Number(bomQuantity) <= 0) {
+      toast.error('Please select a valid BOM and enter a quantity greater than 0.');
+      return;
+    }
+
+    const selectedBom = boms.find(b => b.id === selectedBomId);
+    if (!selectedBom || !selectedBom.materials) return;
+
+    const multiplier = Number(bomQuantity);
+    
+    // Add new items from BOM
+    const newItems = selectedBom.materials.map((mat, index) => ({
+      id: Date.now() + index,
+      productId: mat.productId,
+      variantId: mat.variantId || '',
+      quantity: String(Number(mat.quantity) * multiplier)
+    }));
+
+    // Filter out empty items
+    const currentItems = items.filter(item => item.productId || item.variantId || item.quantity);
+
+    setItems([...currentItems, ...newItems]);
+    
+    setIsBomModalOpen(false);
+    setSelectedBomId('');
+    setBomQuantity('');
+    toast.success(`Added raw materials for ${multiplier} BOM units.`);
   };
 
   const getAvailableStock = (productId, variantId) => {
@@ -209,9 +250,14 @@ export default function CreateTransferForm() {
         <Card className="p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-bold text-surface-900">Items to Transfer</h2>
-            <Button type="button" variant="outline" size="sm" onClick={addItem} icon={<Plus className="w-4 h-4" />}>
-              Add Item
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsBomModalOpen(true)} icon={<Layers className="w-4 h-4" />}>
+                Load from BOM
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={addItem} icon={<Plus className="w-4 h-4" />}>
+                Add Item
+              </Button>
+            </div>
           </div>
 
           {!transferData.sourceBranch ? (
@@ -326,6 +372,53 @@ export default function CreateTransferForm() {
           </Button>
         </div>
       </form>
+
+      <Modal
+        isOpen={isBomModalOpen}
+        onClose={() => setIsBomModalOpen(false)}
+        title="Load Items from BOM"
+        description="Select a Bill of Materials and enter the target quantity to auto-populate the transfer list with required raw materials."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setIsBomModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddFromBom}>Load Items</Button>
+          </>
+        }
+      >
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-surface-700">Select BOM *</label>
+            <select
+              className="w-full px-4 py-2 bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              value={selectedBomId}
+              onChange={e => setSelectedBomId(e.target.value)}
+            >
+              <option value="">Select a Bill of Materials...</option>
+              {boms.map(bom => {
+                const prod = products.find(p => p.id === bom.finishedProductId);
+                const v = variants.find(v => v.id === bom.finishedVariantId);
+                const prodName = prod ? prod.name : 'Unknown Product';
+                const varName = v ? `${v.name} ${v.size ? `(${v.size})` : ''}` : '';
+                return (
+                  <option key={bom.id} value={bom.id}>
+                    {prodName} {varName ? `- ${varName}` : ''} (v{bom.version})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-surface-700">Target Quantity *</label>
+            <Input
+              type="number"
+              min="1"
+              placeholder="e.g. number of bulbs to produce"
+              value={bomQuantity}
+              onChange={e => setBomQuantity(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

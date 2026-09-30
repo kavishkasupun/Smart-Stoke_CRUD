@@ -122,12 +122,20 @@ export const updateProduct = async (id, data, userId) => {
 
 export const deleteProduct = async (id) => {
   try {
-    // Delete product logic - wait, delete needs a userId for audit!
-    // We'll just pass userId as a second parameter in deleteProduct.
     const productRef = doc(db, COLLECTIONS.PRODUCTS, id);
     
     const beforeSnap = await getDoc(productRef);
     const beforeData = beforeSnap.exists() ? beforeSnap.data() : null;
+
+    if (beforeData && beforeData.hasVariants !== false) {
+      // Delete all variants associated with this product
+      const variantsRef = collection(db, COLLECTIONS.PRODUCT_VARIANTS);
+      const q = query(variantsRef, where('productId', '==', id));
+      const variantsSnap = await getDocs(q);
+      
+      const deletePromises = variantsSnap.docs.map(vDoc => deleteDoc(vDoc.ref));
+      await Promise.all(deletePromises);
+    }
 
     await deleteDoc(productRef);
 

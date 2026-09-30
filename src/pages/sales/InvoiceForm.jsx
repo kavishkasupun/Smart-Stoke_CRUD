@@ -34,7 +34,7 @@ export default function InvoiceForm() {
 
   // Line Items
   const [items, setItems] = useState([
-    { id: Date.now().toString(), productId: '', variantId: '', quantity: 1, unitPrice: 0, discountType: 'FIXED', discountValue: 0 }
+    { id: Date.now().toString(), productId: '', variantId: '', quantity: 1, unitPrice: 0, discountType: 'PERCENTAGE', discountValue: 0 }
   ]);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function InvoiceForm() {
   const handleAddItem = () => {
     setItems(prev => [
       ...prev,
-      { id: Date.now().toString(), productId: '', variantId: '', quantity: 1, unitPrice: 0, discountType: 'FIXED', discountValue: 0 }
+      { id: Date.now().toString(), productId: '', variantId: '', quantity: 1, unitPrice: 0, discountType: 'PERCENTAGE', discountValue: 0 }
     ]);
   };
 
@@ -138,13 +138,9 @@ export default function InvoiceForm() {
       const discountVal = parseFloat(item.discountValue) || 0;
 
       const lineSub = qty * price;
-      let lineDisc = 0;
-
-      if (item.discountType === 'PERCENTAGE') {
-        lineDisc = lineSub * (discountVal / 100);
-      } else {
-        lineDisc = discountVal; // Fixed discount is per line total, not per unit
-      }
+      
+      const unitDisc = item.discountType === 'PERCENTAGE' ? price * (discountVal / 100) : discountVal;
+      const lineDisc = qty * unitDisc;
 
       subTotal += lineSub;
       totalDiscount += lineDisc;
@@ -201,13 +197,11 @@ export default function InvoiceForm() {
         const qty = parseFloat(item.quantity) || 0;
         const price = mode === 'PRICE_INCLUDED' ? parseFloat(item.unitPrice) : 0;
         const discountVal = mode === 'PRICE_INCLUDED' ? parseFloat(item.discountValue) : 0;
+        
         let lineDisc = 0;
         if (mode === 'PRICE_INCLUDED') {
-          if (item.discountType === 'PERCENTAGE') {
-            lineDisc = (qty * price) * (discountVal / 100);
-          } else {
-            lineDisc = discountVal;
-          }
+          const unitDisc = item.discountType === 'PERCENTAGE' ? price * (discountVal / 100) : discountVal;
+          lineDisc = qty * unitDisc;
         }
 
         return {
@@ -415,52 +409,76 @@ export default function InvoiceForm() {
                       />
                     </div>
 
-                    {mode === 'PRICE_INCLUDED' && (
-                      <>
-                        <div className="flex-[2] min-w-[120px] space-y-1">
-                          <label className="block text-xs font-medium text-surface-500">Unit Price</label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required
-                            value={item.unitPrice}
-                            onChange={(e) => handleItemChange(item.id, 'unitPrice', e.target.value)}
-                          />
-                        </div>
+                    {mode === 'PRICE_INCLUDED' && (() => {
+                      const qty = parseFloat(item.quantity) || 0;
+                      const price = parseFloat(item.unitPrice) || 0;
+                      const disc = parseFloat(item.discountValue) || 0;
+                      const unitDisc = item.discountType === 'PERCENTAGE' ? price * (disc / 100) : disc;
+                      const finalUnitPrice = Math.max(0, price - unitDisc);
+                      const beforeDiscTotal = qty * price;
+                      const afterDiscTotal = qty * finalUnitPrice;
 
-                        <div className="flex-[3] min-w-[180px] flex gap-2">
-                          <div className="w-20 space-y-1">
-                            <label className="block text-xs font-medium text-surface-500">Type</label>
-                            <select
-                              className="w-full px-2 py-2 bg-white border border-surface-300 rounded-md text-sm"
-                              value={item.discountType}
-                              onChange={(e) => handleItemChange(item.id, 'discountType', e.target.value)}
-                            >
-                              <option value="FIXED">Rs</option>
-                              <option value="PERCENTAGE">%</option>
-                            </select>
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <label className="block text-xs font-medium text-surface-500">Discount</label>
+                      return (
+                        <>
+                          <div className="flex-[2] min-w-[120px] space-y-1">
+                            <label className="block text-xs font-medium text-surface-500">Unit Price</label>
                             <Input
                               type="number"
                               min="0"
                               step="0.01"
-                              value={item.discountValue}
-                              onChange={(e) => handleItemChange(item.id, 'discountValue', e.target.value)}
+                              required
+                              value={item.unitPrice}
+                              onChange={(e) => handleItemChange(item.id, 'unitPrice', e.target.value)}
                             />
                           </div>
-                        </div>
 
-                        <div className="flex-[2] min-w-[120px] space-y-1 text-right">
-                          <label className="block text-xs font-medium text-surface-500">Line Total</label>
-                          <div className="h-10 flex items-center justify-end font-bold text-surface-900 bg-white border border-surface-200 px-3 rounded-md">
-                            Rs. {((item.quantity * item.unitPrice) - (item.discountType === 'PERCENTAGE' ? (item.quantity * item.unitPrice * (item.discountValue / 100)) : item.discountValue)).toFixed(2)}
+                          <div className="flex-[3] min-w-[180px] flex gap-2">
+                            <div className="w-20 space-y-1">
+                              <label className="block text-xs font-medium text-surface-500">Type</label>
+                              <select
+                                className="w-full px-2 py-2 bg-white border border-surface-300 rounded-md text-sm"
+                                value={item.discountType}
+                                onChange={(e) => handleItemChange(item.id, 'discountType', e.target.value)}
+                              >
+                                <option value="PERCENTAGE">%</option>
+                                <option value="FIXED">Rs</option>
+                              </select>
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <label className="block text-xs font-medium text-surface-500">Discount</label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.discountValue}
+                                onChange={(e) => handleItemChange(item.id, 'discountValue', e.target.value)}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </>
-                    )}
+
+                          <div className="flex-[4] min-w-[300px] flex gap-3 text-right">
+                            <div className="flex-1 space-y-1">
+                              <label className="block text-xs font-medium text-surface-500">Final Price</label>
+                              <div className="h-10 flex items-center justify-end font-semibold text-surface-700 bg-surface-100 border border-surface-200 px-2 rounded-md text-sm">
+                                Rs. {finalUnitPrice.toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <label className="block text-xs font-medium text-surface-500">Gross Total</label>
+                              <div className="h-10 flex items-center justify-end font-semibold text-surface-700 bg-surface-100 border border-surface-200 px-2 rounded-md text-sm line-through">
+                                {beforeDiscTotal.toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <label className="block text-xs font-medium text-surface-900 font-bold">Net Total</label>
+                              <div className="h-10 flex items-center justify-end font-bold text-primary-700 bg-primary-50 border border-primary-200 px-2 rounded-md text-sm">
+                                Rs. {afterDiscTotal.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );

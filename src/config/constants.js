@@ -3,6 +3,7 @@
  */
 
 export const APP_NAME = 'Stoke CRUD';
+export const CREATE_BY = 'SPARKLE SHADOW';
 export const APP_DESCRIPTION = 'Multi-Branch Inventory & Billing Management';
 
 /**

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, Box } from 'lucide-react';
+import { Search, Filter, Box, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import { Card, Table, Badge, Input, Spinner } from '../../components/ui';
 import { getProductVariants, getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
+import { getActiveBoms } from '../../services/bomService';
 
 export default function StockOverview() {
   const [variants, setVariants] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [boms, setBoms] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -14,6 +16,7 @@ export default function StockOverview() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedProductType, setSelectedProductType] = useState('');
+  const [expandedRows, setExpandedRows] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -22,13 +25,15 @@ export default function StockOverview() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [variantsData, productsData, categoriesData] = await Promise.all([
+      const [variantsData, productsData, categoriesData, bomsData] = await Promise.all([
         getProductVariants(), 
         getProducts(),
-        getCategories()
+        getCategories(),
+        getActiveBoms()
       ]);
       
       setCategories(categoriesData);
+      setBoms(bomsData);
 
       const nonVariantProducts = productsData.filter(p => p.hasVariants === false).map(p => ({
         id: p.id,
@@ -92,15 +97,104 @@ export default function StockOverview() {
     return matchesSearch && matchesStatus && matchesCategory && matchesType;
   });
 
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const getVariantStock = (productId, variantId) => {
+    if (variantId) {
+      const v = variants.find(v => v.id === variantId);
+      return v?.stock || { mabola: 0, jaffna: 0, overall: 0 };
+    }
+    const p = variants.find(v => v.id === productId);
+    return p?.stock || { mabola: 0, jaffna: 0, overall: 0 };
+  };
+
+  const renderRow = (row, index) => {
+    const bom = boms.find(b => b.finishedProductId === row.productId && (b.finishedVariantId === row.id || !b.finishedVariantId));
+    const isExpanded = !!expandedRows[row.id];
+    const hasBom = !!bom;
+
+    return (
+      <React.Fragment key={row.id}>
+        <tr className="hover:bg-surface-50/50 transition-colors border-b border-surface-100">
+          {columns.map((col, idx) => (
+            <td key={idx} className="px-4 py-3 text-surface-700 whitespace-nowrap">
+              {col.render ? col.render(row[col.accessor], row, { hasBom, isExpanded, toggleRow }) : (row[col.accessor] ?? '—')}
+            </td>
+          ))}
+        </tr>
+        {isExpanded && hasBom && (
+          <tr className="bg-surface-50/80 border-b border-surface-200">
+            <td colSpan={columns.length} className="px-0 py-0">
+              <div className="px-12 py-4 shadow-inner">
+                <div className="flex items-center gap-2 mb-3">
+                  <Layers className="w-4 h-4 text-primary-600" />
+                  <h4 className="font-semibold text-surface-900 text-sm">Bill of Materials (Raw Materials Required)</h4>
+                  <Badge variant="surface" className="ml-2 text-xs">v{bom.version}</Badge>
+                </div>
+                
+                <div className="bg-white rounded border border-surface-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-surface-100 text-surface-600">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium">Material</th>
+                        <th className="px-4 py-2 text-right font-medium">Qty per Unit</th>
+                        <th className="px-4 py-2 text-right font-medium">Available (Mabola)</th>
+                        <th className="px-4 py-2 text-right font-medium">Available (Jaffna)</th>
+                        <th className="px-4 py-2 text-right font-medium">Total Available</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-surface-100">
+                      {bom.materials?.map((mat, i) => {
+                        const matStock = getVariantStock(mat.productId, mat.variantId);
+                        const matName = variants.find(v => (mat.variantId ? v.id === mat.variantId : v.productId === mat.productId))?.name || 'Unknown Material';
+                        
+                        return (
+                          <tr key={i} className="hover:bg-surface-50">
+                            <td className="px-4 py-2 text-surface-800">{matName}</td>
+                            <td className="px-4 py-2 text-right font-mono text-surface-600">{mat.quantity}</td>
+                            <td className="px-4 py-2 text-right text-surface-600">{matStock.mabola || 0}</td>
+                            <td className="px-4 py-2 text-right text-surface-600">{matStock.jaffna || 0}</td>
+                            <td className="px-4 py-2 text-right font-medium text-surface-800">{matStock.overall || 0}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  };
+
   const columns = [
     { 
       header: 'Product/Variant Name', 
       accessor: 'name',
-      render: (val, row) => (
-        <div>
-          <div className="font-medium text-surface-900">{val}</div>
-          {row.size && <div className="text-xs text-surface-500">Size: {row.size}</div>}
-          <div className="text-xs text-surface-400 font-mono mt-0.5">SKU: {row.sku || 'N/A'}</div>
+      render: (val, row, context) => (
+        <div className="flex items-center gap-2">
+          {context?.hasBom ? (
+            <button 
+              onClick={() => context.toggleRow(row.id)}
+              className="p-1 hover:bg-surface-200 rounded text-surface-500 transition-colors"
+            >
+              {context.isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+          ) : (
+            <div className="w-6" /> // spacer
+          )}
+          <div>
+            <div className="font-medium text-surface-900">{val}</div>
+            {row.size && <div className="text-xs text-surface-500">Size: {row.size}</div>}
+            <div className="text-xs text-surface-400 font-mono mt-0.5">SKU: {row.sku || 'N/A'}</div>
+          </div>
         </div>
       )
     },
@@ -219,6 +313,7 @@ export default function StockOverview() {
           <Table 
             columns={columns}
             data={filteredVariants}
+            renderRow={renderRow}
             emptyMessage="No variants found matching your filters."
           />
         )}

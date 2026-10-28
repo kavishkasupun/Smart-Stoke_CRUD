@@ -13,7 +13,7 @@ import { formatDate } from '../../utils/formatters';
 export default function AuditLogs() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const isSuperAdmin = canViewAuditLogs(userProfile?.role);
+  const isSuperAdmin = canViewAuditLogs(userProfile);
   const toast = useToast();
 
   const [logs, setLogs] = useState([]);
@@ -26,14 +26,8 @@ export default function AuditLogs() {
   const [selectedAction, setSelectedAction] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
 
-  const ACTION_TYPES = [
-    'LOGIN', 'LOGOUT', 
-    'CREATE_PRODUCT', 'UPDATE_PRODUCT', 'DELETE_PRODUCT',
-    'CREATE_VARIANT', 'UPDATE_VARIANT', 'DELETE_VARIANT',
-    'RECEIVE_STOCK', 'TRANSFER_STOCK', 'ADJUST_STOCK',
-    'CREATE_BILL', 'CANCEL_BILL', 'SALE_RETURN',
-    'CREATE_USER', 'UPDATE_USER', 'CHANGE_USER_ROLE', 'ACTIVATE_USER', 'DEACTIVATE_USER', 'RESET_USER_PASSWORD'
-  ];
+  // Derive ACTION_TYPES dynamically from logs
+  const ACTION_TYPES = Array.from(new Set(logs.map(log => log.action).filter(Boolean))).sort();
 
   useEffect(() => {
     if (!isSuperAdmin) {
@@ -74,6 +68,17 @@ export default function AuditLogs() {
     const matchesBranch = selectedBranch ? log.branchId === selectedBranch : true;
     
     return matchesSearch && matchesUser && matchesAction && matchesBranch;
+  });
+
+  // Explicitly sort logs by timestamp descending (newest first) to ensure correct order
+  const sortedLogs = [...filteredLogs].sort((a, b) => {
+    const getMs = (dateVal) => {
+      if (!dateVal) return 0;
+      if (dateVal.seconds) return dateVal.seconds * 1000;
+      if (typeof dateVal.toMillis === 'function') return dateVal.toMillis();
+      return new Date(dateVal).getTime();
+    };
+    return getMs(b.timestamp) - getMs(a.timestamp);
   });
 
   const getActionColor = (action) => {
@@ -208,7 +213,7 @@ export default function AuditLogs() {
         
         <Table 
           columns={columns}
-          data={filteredLogs}
+          data={sortedLogs}
           isLoading={loading}
           emptyMessage="No audit logs found matching your filters."
         />

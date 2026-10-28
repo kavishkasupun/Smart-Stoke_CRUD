@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Send, Layers } from 'lucide-react';
-import { Card, Button, Input, Spinner, Badge, Modal } from '../../components/ui';
+import { Plus, Trash2, ArrowLeft, Send, Layers, Package } from 'lucide-react';
+import { Card, Button, Input, Spinner, Badge, Modal, SearchableSelect } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { getProducts, getProductVariants } from '../../services/productService';
-import { createTransfer } from '../../services/stockTransferService';
+import { createTransfer, completeTransfer } from '../../services/stockTransferService';
 import { getActiveBoms } from '../../services/bomService';
 import { BRANCHES } from '../../config/constants';
 
@@ -59,6 +59,69 @@ export default function CreateTransferForm() {
       setLoading(false);
     }
   };
+
+  // Helper to get detailed stock levels (Mabola, Jaffna, Overall)
+  const getItemStockDetails = (productId, variantId) => {
+    if (!productId) {
+      return { mabola: 0, jaffna: 0, overall: 0, isProductLevel: false };
+    }
+
+    const product = products.find(p => p.id === productId);
+    if (!product) return { mabola: 0, jaffna: 0, overall: 0, isProductLevel: false };
+
+    // If specific variant is selected
+    if (variantId) {
+      const variant = variants.find(v => v.id === variantId);
+      const mabola = variant?.stock?.mabola || 0;
+      const jaffna = variant?.stock?.jaffna || 0;
+      const overall = variant?.stock?.overall ?? (mabola + jaffna);
+      return { mabola, jaffna, overall, isProductLevel: false };
+    }
+
+    // If product has NO variants (single product)
+    if (product.hasVariants === false) {
+      const mabola = product.stock?.mabola || 0;
+      const jaffna = product.stock?.jaffna || 0;
+      const overall = product.stock?.overall ?? (mabola + jaffna);
+      return { mabola, jaffna, overall, isProductLevel: false };
+    }
+
+    // If product HAS variants but none selected yet: sum across all its variants
+    const productVariants = variants.filter(v => v.productId === productId);
+    const mabola = productVariants.reduce((sum, v) => sum + (v.stock?.mabola || 0), 0);
+    const jaffna = productVariants.reduce((sum, v) => sum + (v.stock?.jaffna || 0), 0);
+    const overall = productVariants.reduce((sum, v) => sum + (v.stock?.overall ?? ((v.stock?.mabola || 0) + (v.stock?.jaffna || 0))), 0);
+    return { mabola, jaffna, overall, isProductLevel: true };
+  };
+
+  // Memoized product options with real-time stock summaries
+  const productOptions = useMemo(() => {
+    return products.map(p => {
+      const isSingle = p.hasVariants === false;
+      let mabola = 0, jaffna = 0, overall = 0;
+
+      if (isSingle) {
+        mabola = p.stock?.mabola || 0;
+        jaffna = p.stock?.jaffna || 0;
+        overall = p.stock?.overall ?? (mabola + jaffna);
+      } else {
+        const vars = variants.filter(v => v.productId === p.id);
+        mabola = vars.reduce((acc, v) => acc + (v.stock?.mabola || 0), 0);
+        jaffna = vars.reduce((acc, v) => acc + (v.stock?.jaffna || 0), 0);
+        overall = vars.reduce((acc, v) => acc + (v.stock?.overall ?? ((v.stock?.mabola || 0) + (v.stock?.jaffna || 0))), 0);
+      }
+
+      const stockSummary = `Overall: ${overall} (Mabola: ${mabola}, Jaffna: ${jaffna})`;
+      const sub = [p.brand, p.sku ? `SKU: ${p.sku}` : null, stockSummary].filter(Boolean).join(' • ');
+
+      return {
+        value: p.id,
+        label: p.name,
+        sublabel: sub,
+        searchKeywords: `${p.name} ${p.brand || ''} ${p.sku || ''} ${p.barcode || ''} ${stockSummary}`
+      };
+    });
+  }, [products, variants]);
 
   const handleItemChange = (id, field, value) => {
     setItems(items.map(item => {
@@ -161,9 +224,9 @@ export default function CreateTransferForm() {
     }
 
     const isConfirmed = await confirm({
-      title: 'Submit Transfer Request',
-      message: `Are you sure you want to request a transfer from ${transferData.sourceBranch} to ${transferData.destinationBranch}? It will require approval to complete.`,
-      confirmText: 'Submit Request',
+      title: 'Confirm Stock Transfer',
+      message: `Are you sure you want to transfer stock from ${transferData.sourceBranch} to ${transferData.destinationBranch}? This will immediately deduct stock from the source and add it to the destination.`,
+      confirmText: 'Confirm Transfer',
       type: 'info'
     });
 
@@ -171,9 +234,10 @@ export default function CreateTransferForm() {
 
     try {
       setSubmitting(true);
-      toast.showLoading('Submitting Transfer Request...');
-      await createTransfer(transferData, items, userProfile.id);
-      toast.success('Transfer request created successfully!');
+      toast.showLoading('Processing Transfer...');
+      const refId = await createTransfer(transferData, items, userProfile.id);
+      await completeTransfer(refId, userProfile.id);
+      toast.success('Transfer completed successfully!');
       navigate('/stock-transfers');
     } catch (error) {
       toast.error(error.message || 'Failed to create transfer.');
@@ -271,12 +335,32 @@ export default function CreateTransferForm() {
                 const productVariants = variants.filter(v => v.productId === item.productId);
                 const hasVariants = selectedProduct ? selectedProduct.hasVariants !== false : true;
                 const availableStock = getAvailableStock(item.productId, item.variantId);
+                const stockDetails = getItemStockDetails(item.productId, item.variantId);
                 
-                // For a product with hasVariants false, if they typed a quantity > stock
+                // For a product with hasVariants false, or when variant is selected
                 const isOverStock = (item.variantId || !hasVariants) && Number(item.quantity) > availableStock;
 
+                const currentVariantOptions = productVariants.map(v => {
+                  const mabola = v.stock?.mabola || 0;
+                  const jaffna = v.stock?.jaffna || 0;
+                  const overall = v.stock?.overall ?? (mabola + jaffna);
+                  const stockSummary = `Overall: ${overall} (Mabola: ${mabola}, Jaffna: ${jaffna})`;
+                  const sub = [v.size ? `Size: ${v.size}` : null, v.sku ? `SKU: ${v.sku}` : null, stockSummary].filter(Boolean).join(' • ');
+
+                  return {
+                    value: v.id,
+                    label: v.name + (v.size ? ` (${v.size})` : ''),
+                    sublabel: sub,
+                    searchKeywords: `${v.name} ${v.size || ''} ${v.sku || ''} ${v.barcode || ''} ${stockSummary}`
+                  };
+                });
+
                 return (
-                  <div key={item.id} className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative">
+                  <div 
+                    key={item.id} 
+                    className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative"
+                    style={{ zIndex: items.length - index + 10 }}
+                  >
                     <div className="absolute -top-3 -left-3 w-6 h-6 bg-surface-900 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
                       {index + 1}
                     </div>
@@ -292,70 +376,131 @@ export default function CreateTransferForm() {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mr-8">
+                      {/* Product Selector */}
                       <div className="col-span-1 md:col-span-4 space-y-1">
                         <label className="block text-xs font-medium text-surface-600">Product *</label>
-                        <select
-                          className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        <SearchableSelect
                           value={item.productId}
-                          onChange={e => handleItemChange(item.id, 'productId', e.target.value)}
+                          onChange={val => handleItemChange(item.id, 'productId', val)}
+                          placeholder="Search or Select Product..."
+                          searchPlaceholder="Type name, brand, SKU to search..."
+                          options={productOptions}
                           required
-                        >
-                          <option value="">Select Product...</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
+                        />
                       </div>
 
-                      {hasVariants && (
+                      {/* Variant Selector */}
+                      {hasVariants ? (
                         <div className="col-span-1 md:col-span-4 space-y-1">
                           <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
-                          <select
-                            className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                          <SearchableSelect
                             value={item.variantId}
-                            onChange={e => handleItemChange(item.id, 'variantId', e.target.value)}
-                            required
+                            onChange={val => handleItemChange(item.id, 'variantId', val)}
+                            placeholder={item.productId ? "Search or Select Variant..." : "Select product first"}
+                            searchPlaceholder="Search variant, size..."
+                            options={currentVariantOptions}
                             disabled={!item.productId}
-                          >
-                            <option value="">Select Variant...</option>
-                            {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
-                          </select>
-                          {item.variantId && (
-                            <div className="text-xs mt-1 text-surface-500 flex justify-between">
-                              <span>Available:</span>
-                              <span className={availableStock > 0 ? 'text-success-600 font-bold' : 'text-danger-600 font-bold'}>
-                                {availableStock}
-                              </span>
-                            </div>
-                          )}
+                            required
+                          />
                         </div>
-                      )}
-                      
-                      {!hasVariants && item.productId && (
-                        <div className="col-span-1 md:col-span-4 space-y-1 flex flex-col justify-center">
-                          <div className="text-xs mt-1 text-surface-500 flex justify-between">
-                              <span>Available in {transferData.sourceBranch}:</span>
-                              <span className={availableStock > 0 ? 'text-success-600 font-bold' : 'text-danger-600 font-bold'}>
-                                {availableStock}
-                              </span>
-                            </div>
-                        </div>
+                      ) : (
+                        <div className="hidden md:block md:col-span-4" />
                       )}
 
-                      <div className="col-span-1 md:col-span-4">
+                      {/* Quantity Input */}
+                      <div className="col-span-1 md:col-span-4 space-y-1">
                         <Input
-                          label="Transfer Quantity *"
+                          label={`Transfer Quantity * ${availableStock > 0 ? `(Max: ${availableStock})` : ''}`}
                           type="number"
                           min="1"
-                          max={availableStock || ''}
-                          placeholder="Qty"
+                          max={availableStock || undefined}
+                          placeholder={availableStock > 0 ? `1 to ${availableStock}` : "Qty"}
                           value={item.quantity}
                           onChange={e => handleItemChange(item.id, 'quantity', e.target.value)}
+                          disabled={!item.productId || (hasVariants && !item.variantId)}
                           required
                         />
                         {isOverStock && (
-                          <p className="text-xs text-danger-500 mt-1">Exceeds available stock!</p>
+                          <p className="text-xs text-danger-600 font-semibold mt-1">
+                            ⚠️ Exceeds available stock in {transferData.sourceBranch} ({availableStock})
+                          </p>
                         )}
                       </div>
                     </div>
+
+                    {/* Stock Levels Breakdown (Overall, Mabola, Jaffna) */}
+                    {selectedProduct && (
+                      <div className="mt-3.5 pt-3 border-t border-surface-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-1.5 text-xs text-surface-600 font-medium">
+                          <Package className="w-4 h-4 text-primary-500" />
+                          <span>
+                            {stockDetails.isProductLevel ? (
+                              <span className="italic">Total Product Stock (all variants combined):</span>
+                            ) : (
+                              <span>Current Stock for this item:</span>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Mabola Stock */}
+                          <div className={`px-2.5 py-1 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                            transferData.sourceBranch?.toLowerCase() === 'mabola'
+                              ? 'bg-primary-50 border-primary-300 text-primary-900 font-semibold ring-1 ring-primary-400/20 shadow-xs'
+                              : transferData.destinationBranch?.toLowerCase() === 'mabola'
+                                ? 'bg-blue-50 border-blue-200 text-blue-900 font-medium'
+                                : 'bg-white border-surface-200 text-surface-700'
+                          }`}>
+                            <span className="text-surface-500">Mabola:</span>
+                            <span className={`font-bold ${stockDetails.mabola > 0 ? 'text-surface-900' : 'text-danger-600'}`}>
+                              {stockDetails.mabola}
+                            </span>
+                            {transferData.sourceBranch?.toLowerCase() === 'mabola' && (
+                              <span className="text-[10px] bg-primary-200 text-primary-800 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
+                                From
+                              </span>
+                            )}
+                            {transferData.destinationBranch?.toLowerCase() === 'mabola' && (
+                              <span className="text-[10px] bg-blue-200 text-blue-800 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
+                                To
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Jaffna Stock */}
+                          <div className={`px-2.5 py-1 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                            transferData.sourceBranch?.toLowerCase() === 'jaffna'
+                              ? 'bg-primary-50 border-primary-300 text-primary-900 font-semibold ring-1 ring-primary-400/20 shadow-xs'
+                              : transferData.destinationBranch?.toLowerCase() === 'jaffna'
+                                ? 'bg-blue-50 border-blue-200 text-blue-900 font-medium'
+                                : 'bg-white border-surface-200 text-surface-700'
+                          }`}>
+                            <span className="text-surface-500">Jaffna:</span>
+                            <span className={`font-bold ${stockDetails.jaffna > 0 ? 'text-surface-900' : 'text-danger-600'}`}>
+                              {stockDetails.jaffna}
+                            </span>
+                            {transferData.sourceBranch?.toLowerCase() === 'jaffna' && (
+                              <span className="text-[10px] bg-primary-200 text-primary-800 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
+                                From
+                              </span>
+                            )}
+                            {transferData.destinationBranch?.toLowerCase() === 'jaffna' && (
+                              <span className="text-[10px] bg-blue-200 text-blue-800 px-1 py-0.5 rounded font-bold uppercase tracking-wider">
+                                To
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Overall Stock */}
+                          <div className="px-2.5 py-1 rounded-lg border bg-surface-100 border-surface-200 text-surface-800 text-xs flex items-center gap-1.5 font-medium">
+                            <span className="text-surface-500">Overall:</span>
+                            <span className="font-bold text-primary-700">
+                              {stockDetails.overall}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -368,7 +513,7 @@ export default function CreateTransferForm() {
             Cancel
           </Button>
           <Button type="submit" isLoading={submitting} icon={<Send className="w-4 h-4" />}>
-            Submit Transfer Request
+            Confirm Transfer
           </Button>
         </div>
       </form>

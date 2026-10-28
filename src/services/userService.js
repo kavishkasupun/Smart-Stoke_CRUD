@@ -83,6 +83,7 @@ export const createUser = async (userData, adminProfile) => {
       name: userData.name,
       role: userData.role,
       branchId: userData.branchId || null,
+      features: userData.features || [],
       active: true,
       preferences: defaultPreferences,
       createdAt: new Date().toISOString(),

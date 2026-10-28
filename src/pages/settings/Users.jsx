@@ -11,7 +11,7 @@ import { useToast } from '../../contexts/ToastContext';
 export default function Users() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const isSuperAdmin = canManageUsers(userProfile?.role);
+  const isSuperAdmin = canManageUsers(userProfile);
   const toast = useToast();
 
   const [users, setUsers] = useState([]);

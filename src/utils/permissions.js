@@ -22,18 +22,26 @@ export function hasRole(userRole, allowedRoles) {
 
 /**
  * Check if the user can manage users and roles
- * @param {string} role 
+ * @param {object} userProfile 
  */
-export function canManageUsers(role) {
-  return hasRole(role, [USER_ROLES.SUPER_ADMIN]);
+export function canManageUsers(userProfile) {
+  if (!userProfile) return false;
+  if (userProfile.features && userProfile.features.length > 0) {
+    if (!userProfile.features.includes('settings')) return false;
+  }
+  return hasRole(userProfile.role, [USER_ROLES.SUPER_ADMIN]);
 }
 
 /**
  * Check if the user can view audit logs
- * @param {string} role 
+ * @param {object} userProfile 
  */
-export function canViewAuditLogs(role) {
-  return hasRole(role, [USER_ROLES.SUPER_ADMIN]);
+export function canViewAuditLogs(userProfile) {
+  if (!userProfile) return false;
+  if (userProfile.features && userProfile.features.length > 0) {
+    if (!userProfile.features.includes('settings')) return false;
+  }
+  return hasRole(userProfile.role, [USER_ROLES.SUPER_ADMIN]);
 }
 
 /**

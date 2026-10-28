@@ -13,7 +13,7 @@ export default function UserDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const isSuperAdmin = canManageUsers(userProfile?.role);
+  const isSuperAdmin = canManageUsers(userProfile);
   const isSelf = userProfile?.id === id;
   const toast = useToast();
   const confirm = useConfirm();
@@ -25,6 +25,7 @@ export default function UserDetails() {
     name: '',
     role: '',
     branchId: '',
+    features: [],
     active: true
   });
   
@@ -54,7 +55,8 @@ export default function UserDetails() {
         name: data.name || '',
         role: data.role || '',
         branchId: data.branchId || '',
-        active: data.active
+        features: data.features || ['main', 'inventory', 'operations', 'sales', 'reports', 'settings'], // Default to all if not set
+        active: data.active !== false
       });
     } catch (err) {
       console.error(err);
@@ -102,6 +104,7 @@ export default function UserDetails() {
       if (formData.name !== user.name) updates.name = formData.name;
       if (formData.role !== user.role) updates.role = formData.role;
       if (formData.branchId !== user.branchId) updates.branchId = formData.branchId;
+      if (JSON.stringify(formData.features) !== JSON.stringify(user.features)) updates.features = formData.features;
       if (formData.active !== user.active) updates.active = formData.active;
 
       if (Object.keys(updates).length > 0) {
@@ -245,6 +248,41 @@ export default function UserDetails() {
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-4 border-t border-surface-200">
+            <label className="block text-sm font-medium text-surface-700">
+              Accessible Features (Modules)
+            </label>
+            <p className="text-xs text-surface-500 mb-2">Select which main sections this user can access.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {[
+                { id: 'inventory', label: 'Inventory (Products, Stock)' },
+                { id: 'operations', label: 'Operations (Manufacture, Receive)' },
+                { id: 'sales', label: 'Sales (Bills, Returns, Customers)' },
+                { id: 'reports', label: 'Reports & Analytics' },
+                { id: 'settings', label: 'Settings (Users, Audit)' }
+              ].map(feature => (
+                <label key={feature.id} className="flex items-center gap-2 cursor-pointer bg-surface-50 p-2 rounded border border-surface-200">
+                  <input
+                    type="checkbox"
+                    checked={formData.features.includes(feature.id)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormData(prev => ({
+                        ...prev,
+                        features: checked 
+                          ? [...prev.features, feature.id]
+                          : prev.features.filter(f => f !== feature.id)
+                      }));
+                    }}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                    disabled={submitting || isSelf}
+                  />
+                  <span className="text-sm text-surface-800 font-medium">{feature.label}</span>
+                </label>
+              ))}
             </div>
           </div>
 

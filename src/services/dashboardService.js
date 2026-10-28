@@ -1,6 +1,8 @@
 import { collection, query, where, getDocs, getCountFromServer, doc, getDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { COLLECTIONS } from '../config/collections';
+import { getAuditLogs } from './auditService';
+import { formatDistanceToNow } from 'date-fns';
 
 // Cache for variants
 let cachedVariants = null;
@@ -201,13 +203,53 @@ export const getOutOfStockVariants = async () => {
 };
 
 /**
- * Fetch mock recent activity for dashboard placeholders
+ * Fetch real recent activity from audit logs
  */
-export const getRecentActivity = () => {
-  return [
-    { id: 1, type: 'movement', desc: 'Received 500 units of Bulb 40W (Mabola)', time: '2 hours ago', icon: 'arrow-down' },
-    { id: 2, type: 'transfer', desc: 'Transferred 100 units Office Desk (Mabola to Jaffna)', time: '5 hours ago', icon: 'arrow-right' },
-    { id: 3, type: 'sale', desc: 'Sale: 50 units Bulb 40W', time: '1 day ago', icon: 'shopping-cart' },
-    { id: 4, type: 'movement', desc: 'Adjusted stock: -2 Office Chair (Damaged)', time: '2 days ago', icon: 'alert-triangle' },
-  ];
+export const getRecentActivity = async () => {
+  try {
+    const logs = await getAuditLogs({ limitCount: 6 });
+    
+    return logs.map(log => {
+      let icon = 'alert-triangle';
+      let type = 'movement';
+      let desc = `${log.userName} performed ${log.action.replace(/_/g, ' ')}`;
+      
+      const action = log.action || '';
+      
+      if (action.includes('RECEIVE') || action.includes('IN')) {
+        icon = 'arrow-down';
+        type = 'movement';
+      } else if (action.includes('TRANSFER')) {
+        icon = 'arrow-right';
+        type = 'transfer';
+      } else if (action.includes('BILL') || action.includes('SALE') || action.includes('INVOICE')) {
+        icon = 'shopping-cart';
+        type = 'sale';
+      } else if (action.includes('CREATE') || action.includes('UPDATE') || action.includes('DELETE')) {
+        icon = 'alert-triangle';
+        type = 'movement';
+      }
+      
+      if (log.entityType && log.entityId) {
+        desc = `${log.action.replace(/_/g, ' ')}: ${log.entityType} ${log.entityId}`;
+      }
+      
+      let timeStr = 'Just now';
+      if (log.timestamp) {
+        const date = log.timestamp.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
+        timeStr = formatDistanceToNow(date, { addSuffix: true });
+      }
+      
+      return {
+        id: log.id,
+        type,
+        desc: `${log.userName} - ${desc}`,
+        time: timeStr,
+        icon
+      };
+    });
+  } catch (error) {
+    console.error('[DashboardService] Error fetching recent activity:', error);
+    return [];
+  }
 };

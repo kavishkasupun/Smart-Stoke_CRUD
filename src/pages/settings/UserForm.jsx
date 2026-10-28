@@ -11,7 +11,7 @@ import { useToast } from '../../contexts/ToastContext';
 export default function UserForm() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const isSuperAdmin = canManageUsers(userProfile?.role);
+  const isSuperAdmin = canManageUsers(userProfile);
   const toast = useToast();
 
   const [formData, setFormData] = useState({
@@ -20,7 +20,8 @@ export default function UserForm() {
     password: '',
     confirmPassword: '',
     role: '',
-    branchId: ''
+    branchId: '',
+    features: ['main', 'inventory', 'operations', 'sales', 'reports'] // Default features
   });
   
   const [submitting, setSubmitting] = useState(false);
@@ -238,6 +239,41 @@ export default function UserForm() {
               <p className="text-xs text-surface-500">
                 {isBranchForced ? 'Branch is automatically determined by the selected role.' : 'Select the specific branch this user works at.'}
               </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-4 border-t border-surface-200">
+            <label className="block text-sm font-medium text-surface-700">
+              Accessible Features (Modules)
+            </label>
+            <p className="text-xs text-surface-500 mb-2">Select which main sections this user can access.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {[
+                { id: 'inventory', label: 'Inventory (Products, Stock)' },
+                { id: 'operations', label: 'Operations (Manufacture, Receive)' },
+                { id: 'sales', label: 'Sales (Bills, Returns, Customers)' },
+                { id: 'reports', label: 'Reports & Analytics' },
+                { id: 'settings', label: 'Settings (Users, Audit)' }
+              ].map(feature => (
+                <label key={feature.id} className="flex items-center gap-2 cursor-pointer bg-surface-50 p-2 rounded border border-surface-200">
+                  <input
+                    type="checkbox"
+                    checked={formData.features.includes(feature.id)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormData(prev => ({
+                        ...prev,
+                        features: checked 
+                          ? [...prev.features, feature.id]
+                          : prev.features.filter(f => f !== feature.id)
+                      }));
+                    }}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                    disabled={submitting}
+                  />
+                  <span className="text-sm text-surface-800 font-medium">{feature.label}</span>
+                </label>
+              ))}
             </div>
           </div>
 

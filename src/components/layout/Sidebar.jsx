@@ -7,12 +7,15 @@ import { NAV_SECTIONS } from '../../config/navigation';
 import { APP_NAME, CREATE_BY } from '../../config/constants';
 import { X, Package, ChevronDown, Sparkles } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 /**
  * Premium Sidebar navigation — modern glassmorphism design with 
  * gradient accents, animated indicators, and smooth micro-animations.
  */
 export function Sidebar() {
   const { pathname } = useLocation();
+  const { userProfile } = useAuth();
   const { isOpen, close } = useSidebar();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [collapsedSections, setCollapsedSections] = useState({});
@@ -91,7 +94,19 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-thin sidebar-nav">
-          {NAV_SECTIONS.map((section) => {
+          {NAV_SECTIONS.filter(section => {
+            // Always show main dashboard
+            if (section.id === 'main') return true;
+            
+            // If user has a specific features array defined, strictly use it
+            if (userProfile?.features && userProfile.features.length > 0) {
+              return userProfile.features.includes(section.id);
+            }
+            
+            // Fallback for old users without features array
+            if (userProfile?.role === 'SUPER_ADMIN') return true;
+            return true; 
+          }).map((section) => {
             const isCollapsed = collapsedSections[section.id];
             const hasActiveItem = section.items.some(item => isActive(item.path));
 

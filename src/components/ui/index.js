@@ -9,3 +9,4 @@ export { Spinner, Skeleton, PageLoader, ContentLoader } from './Loading';
 export { Badge } from './Badge';
 export { StatusBadge } from './StatusBadge';
 export { DateRangePicker } from './DateRangePicker';
+export { SearchableSelect } from './SearchableSelect';

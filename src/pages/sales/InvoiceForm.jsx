@@ -8,7 +8,188 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { BRANCH_LIST } from '../../config/constants';
 import { getCustomers } from '../../services/customerService';
 import { getProducts, getProductVariants } from '../../services/productService';
+import { getCategories } from '../../services/categoryService';
 import { createInvoice } from '../../services/invoiceService';
+
+/**
+ * Check if a product belongs to the Bulb category or has bulb in its name
+ */
+export const isBulbProduct = (product) => {
+  if (!product) return false;
+  const name = (product.name || '').toLowerCase();
+  const category = (product.categoryName || '').toLowerCase();
+  return name.includes('bulb') || category.includes('bulb');
+};
+
+/**
+ * General gross amount tier discount for bulbs:
+ * 50,000-100,000: 4.50%
+ * 101,000-150,000: 5.00%
+ * 151,000-500,000: 5.50%
+ * 501,000+ (500,000 ABOVE): 6.00%
+ */
+export const getBulbTierDiscount = (grossAmount) => {
+  const amount = parseFloat(grossAmount) || 0;
+  if (amount > 500000) return 6.00;
+  if (amount > 150000) return 5.50;
+  if (amount > 100000) return 5.00;
+  if (amount >= 50000) return 4.50;
+  return 0;
+};
+
+/**
+ * Identify specific W/P product model group
+ */
+export const getWPModelGroup = (product, variant) => {
+  if (!product) return null;
+  const targetStr = `${product.name || ''} ${variant?.size || ''} ${variant?.name || ''} ${product.sku || ''}`.toUpperCase();
+  const cleanStr = targetStr.replace(/[\/\.\s\-_]/g, '');
+
+  const hasWPMarker = /(W\/P|WP|W\.P)/i.test(targetStr) || cleanStr.includes('WP');
+  if (!hasWPMarker) return null;
+
+  // Group 1: 5W
+  if (
+    /(^|[^0-9])5W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('5WP') ||
+    cleanStr.includes('WP5W') ||
+    cleanStr.includes('WP5')
+  ) {
+    return 'GROUP_5W';
+  }
+
+  // Group 2: 9W, 13W, 18W
+  if (
+    /(^|[^0-9])9W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('9WP') ||
+    cleanStr.includes('WP9W') ||
+    cleanStr.includes('WP9')
+  ) {
+    return 'GROUP_9W';
+  }
+  if (
+    /(^|[^0-9])13W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('13WP') ||
+    cleanStr.includes('WP13W') ||
+    cleanStr.includes('WP13')
+  ) {
+    return 'GROUP_13W';
+  }
+  if (
+    /(^|[^0-9])18W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('18WP') ||
+    cleanStr.includes('WP18W') ||
+    cleanStr.includes('WP18')
+  ) {
+    return 'GROUP_18W';
+  }
+
+  // Group 3: 28W, 38W, 48W
+  if (
+    /(^|[^0-9])28W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('28WP') ||
+    cleanStr.includes('WP28W') ||
+    cleanStr.includes('WP28')
+  ) {
+    return 'GROUP_28W';
+  }
+  if (
+    /(^|[^0-9])38W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('38WP') ||
+    cleanStr.includes('WP38W') ||
+    cleanStr.includes('WP38')
+  ) {
+    return 'GROUP_38W';
+  }
+  if (
+    /(^|[^0-9])48W([^0-9]|$)/i.test(targetStr) ||
+    cleanStr.includes('48WP') ||
+    cleanStr.includes('WP48W') ||
+    cleanStr.includes('WP48')
+  ) {
+    return 'GROUP_48W';
+  }
+
+  return null;
+};
+
+/**
+ * Specific W/P Product Tier Discounts
+ */
+export const getWPProductDiscount = (product, variant, quantity) => {
+  const model = getWPModelGroup(product, variant);
+  if (!model) return 0;
+
+  const qty = parseFloat(quantity) || 0;
+
+  // Group 1: W/P 5W (99-499 = 1.00%, 500-5000 = 2.00%)
+  if (model === 'GROUP_5W') {
+    if (qty >= 500) return 2.00;
+    if (qty >= 99) return 1.00;
+    return 0;
+  }
+
+  // Group 2: W/P 9W, W/P 13W, W/P 18W (99-299 = 2.00%, 300-599 = 2.50%, 600-1999 = 3.00%, 2000-5000 = 3.50%)
+  if (model === 'GROUP_9W' || model === 'GROUP_13W' || model === 'GROUP_18W') {
+    if (qty >= 2000) return 3.50;
+    if (qty >= 600) return 3.00;
+    if (qty >= 300) return 2.50;
+    if (qty >= 99) return 2.00;
+    return 0;
+  }
+
+  // Group 3: W/P 28W, W/P 38W, W/P 48W (49-99 = 2.00%, 100-499 = 2.50%, 500-999 = 3.00%, 1000-5000 = 3.50%)
+  if (model === 'GROUP_28W' || model === 'GROUP_38W' || model === 'GROUP_48W') {
+    if (qty >= 1000) return 3.50;
+    if (qty >= 500) return 3.00;
+    if (qty >= 100) return 2.50;
+    if (qty >= 49) return 2.00;
+    return 0;
+  }
+
+  return 0;
+};
+
+/**
+ * Get descriptive label for the W/P group
+ */
+export const getWPGroupDescription = (product, variant) => {
+  const model = getWPModelGroup(product, variant);
+  if (!model) return null;
+
+  if (model === 'GROUP_5W') {
+    return 'W/P 5W extra: 99-499 (+1%), 500-5000 (+2%)';
+  }
+
+  if (model === 'GROUP_9W' || model === 'GROUP_13W' || model === 'GROUP_18W') {
+    return 'W/P (9W/13W/18W) extra: 99-299 (+2%), 300-599 (+2.5%), 600-1999 (+3%), 2000+ (+3.5%)';
+  }
+
+  if (model === 'GROUP_28W' || model === 'GROUP_38W' || model === 'GROUP_48W') {
+    return 'W/P (28W/38W/48W) extra: 49-99 (+2%), 100-499 (+2.5%), 500-999 (+3%), 1000+ (+3.5%)';
+  }
+
+  return null;
+};
+
+/**
+ * Calculate combined auto discount: General Bulb Tier (by Gross Amount) + W/P Product Tier (by Quantity)
+ */
+export const calculateAutoDiscount = (product, variant, quantity, unitPrice = null) => {
+  const qty = parseFloat(quantity) || 0;
+  const price = (unitPrice !== null && unitPrice !== undefined && unitPrice !== '') 
+    ? parseFloat(unitPrice) || 0 
+    : (variant?.sellingPrice || product?.sellingPrice || 0);
+  const grossAmount = qty * price;
+  const generalDisc = isBulbProduct(product) ? getBulbTierDiscount(grossAmount) : 0;
+  const wpDisc = getWPProductDiscount(product, variant, qty);
+  const total = generalDisc + wpDisc;
+  return {
+    generalDisc,
+    wpDisc,
+    total: parseFloat(total.toFixed(2))
+  };
+};
 
 export default function InvoiceForm() {
   const navigate = useNavigate();
@@ -51,16 +232,23 @@ export default function InvoiceForm() {
 
   const fetchMasterData = async () => {
     try {
-      const [customersData, productsData, variantsData] = await Promise.all([
+      const [customersData, productsData, variantsData, categoriesData] = await Promise.all([
         getCustomers({ activeOnly: true }),
         getProducts(),
-        getProductVariants()
+        getProductVariants(),
+        getCategories()
       ]);
       
+      const categoryMap = (categoriesData || []).reduce((acc, cat) => {
+        acc[cat.id] = cat.name;
+        return acc;
+      }, {});
+
       const mappedProducts = productsData
-        .filter(p => p.active !== false)
+        .filter(p => p.active !== false && p.productType === 'FINISHED_PRODUCT')
         .map(p => ({
           ...p,
+          categoryName: categoryMap[p.categoryId] || '',
           variants: variantsData.filter(v => v.productId === p.id && v.active !== false)
         }));
 
@@ -98,6 +286,17 @@ export default function InvoiceForm() {
           if (product && product.hasVariants === false) {
              updated.unitPrice = product.sellingPrice || 0;
           }
+          if (product) {
+            const { total } = calculateAutoDiscount(product, null, updated.quantity, updated.unitPrice);
+            if (total > 0) {
+              updated.discountType = 'PERCENTAGE';
+              updated.discountValue = total;
+            } else {
+              updated.discountValue = 0;
+            }
+          } else {
+            updated.discountValue = 0;
+          }
         }
         
         if (field === 'variantId' && value) {
@@ -106,7 +305,45 @@ export default function InvoiceForm() {
           if (variant && variant.sellingPrice) {
             updated.unitPrice = variant.sellingPrice;
           }
+          if (product) {
+            const { total } = calculateAutoDiscount(product, variant, updated.quantity, updated.unitPrice);
+            if (total > 0) {
+              updated.discountType = 'PERCENTAGE';
+              updated.discountValue = total;
+            } else {
+              updated.discountValue = 0;
+            }
+          }
         }
+
+        if (field === 'quantity') {
+          const product = products.find(p => p.id === updated.productId);
+          const variant = product?.variants?.find(v => v.id === updated.variantId);
+          if (product) {
+            const { total } = calculateAutoDiscount(product, variant, value, updated.unitPrice);
+            if (total > 0) {
+              updated.discountType = 'PERCENTAGE';
+              updated.discountValue = total;
+            } else {
+              updated.discountValue = 0;
+            }
+          }
+        }
+
+        if (field === 'unitPrice') {
+          const product = products.find(p => p.id === updated.productId);
+          const variant = product?.variants?.find(v => v.id === updated.variantId);
+          if (product) {
+            const { total } = calculateAutoDiscount(product, variant, updated.quantity, value);
+            if (total > 0) {
+              updated.discountType = 'PERCENTAGE';
+              updated.discountValue = total;
+            } else {
+              updated.discountValue = 0;
+            }
+          }
+        }
+
         return updated;
       }
       return item;
@@ -333,7 +570,11 @@ export default function InvoiceForm() {
             {items.map((item, index) => {
               const product = products.find(p => p.id === item.productId);
               const variants = product?.variants || [];
+              const variant = variants.find(v => v.id === item.variantId);
               const availableStock = getAvailableStock(item.productId, item.variantId);
+              const isBulb = isBulbProduct(product);
+              const { generalDisc, wpDisc, total: autoTierTotal } = calculateAutoDiscount(product, variant, item.quantity, item.unitPrice);
+              const wpDesc = getWPGroupDescription(product, variant);
               
               return (
                 <div key={item.id} className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative">
@@ -432,28 +673,50 @@ export default function InvoiceForm() {
                             />
                           </div>
 
-                          <div className="flex-[3] min-w-[180px] flex gap-2">
-                            <div className="w-20 space-y-1">
-                              <label className="block text-xs font-medium text-surface-500">Type</label>
-                              <select
-                                className="w-full px-2 py-2 bg-white border border-surface-300 rounded-md text-sm"
-                                value={item.discountType}
-                                onChange={(e) => handleItemChange(item.id, 'discountType', e.target.value)}
-                              >
-                                <option value="PERCENTAGE">%</option>
-                                <option value="FIXED">Rs</option>
-                              </select>
-                            </div>
-                            <div className="flex-1 space-y-1">
+                          <div className="flex-[3] min-w-[200px] space-y-1">
+                            <div className="flex justify-between items-center">
                               <label className="block text-xs font-medium text-surface-500">Discount</label>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.discountValue}
-                                onChange={(e) => handleItemChange(item.id, 'discountValue', e.target.value)}
-                              />
+                              {autoTierTotal > 0 && item.discountType === 'PERCENTAGE' && Number(item.discountValue) === autoTierTotal && (
+                                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  {generalDisc > 0 && wpDisc > 0 
+                                    ? `Tier ${autoTierTotal}% (${generalDisc}% + W/P ${wpDisc}%)` 
+                                    : wpDisc > 0 
+                                      ? `W/P Tier ${wpDisc}%` 
+                                      : `Bulb Tier ${generalDisc}%`}
+                                </span>
+                              )}
                             </div>
+                            <div className="flex gap-2">
+                              <div className="w-16">
+                                <select
+                                  className="w-full px-2 py-2 bg-white border border-surface-300 rounded-md text-sm"
+                                  value={item.discountType}
+                                  onChange={(e) => handleItemChange(item.id, 'discountType', e.target.value)}
+                                >
+                                  <option value="PERCENTAGE">%</option>
+                                  <option value="FIXED">Rs</option>
+                                </select>
+                              </div>
+                              <div className="flex-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.discountValue}
+                                  onChange={(e) => handleItemChange(item.id, 'discountValue', e.target.value)}
+                                />
+                              </div>
+                            </div>
+                            {isBulb && (
+                              <p className="text-[10px] text-primary-600 font-medium">
+                                Bulb tiers: 50,000-100,000 (4.5%) | 101,000-150,000 (5%) | 151,000-500,000 (5.5%) | 501,000+ (6%)
+                              </p>
+                            )}
+                            {wpDesc && (
+                              <p className="text-[10px] text-emerald-700 font-semibold">
+                                {wpDesc}
+                              </p>
+                            )}
                           </div>
 
                           <div className="flex-[4] min-w-[300px] flex gap-3 text-right">

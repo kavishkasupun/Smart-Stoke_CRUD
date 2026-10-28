@@ -4,6 +4,7 @@ import { TopHeader } from './TopHeader';
 import { MobileNav } from './MobileNav';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { cn } from '../../utils/cn';
+import { useAutoLogout } from '../../hooks/useAutoLogout';
 
 /**
  * Main application layout.
@@ -13,6 +14,7 @@ import { cn } from '../../utils/cn';
  * Mobile:  Top header + content area + bottom nav.
  */
 export function AppLayout() {
+  useAutoLogout();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   return (

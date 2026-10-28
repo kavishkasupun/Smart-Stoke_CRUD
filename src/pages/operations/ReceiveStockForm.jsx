@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react';
-import { Card, Button, Input, Select, Spinner } from '../../components/ui';
+import { Plus, Trash2, ArrowLeft, Save, PackagePlus } from 'lucide-react';
+import { Card, Button, Input, Select, Spinner, SearchableSelect } from '../../components/ui';
+import QuickAddProductModal from '../../components/inventory/QuickAddProductModal';
+import QuickAddVariantModal from '../../components/inventory/QuickAddVariantModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -20,6 +22,19 @@ export default function ReceiveStockForm() {
   const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState([]);
   const [variants, setVariants] = useState([]);
+
+  // Quick Add Modal States
+  const [productModalState, setProductModalState] = useState({
+    isOpen: false,
+    targetItemId: null,
+    initialName: ''
+  });
+
+  const [variantModalState, setVariantModalState] = useState({
+    isOpen: false,
+    targetItemId: null,
+    product: null
+  });
 
   // Form State
   const [receiveData, setReceiveData] = useState({
@@ -54,13 +69,38 @@ export default function ReceiveStockForm() {
     }
   };
 
+  // Memoized product options for SearchableSelect
+  const productOptions = useMemo(() => {
+    return products.map(p => ({
+      value: p.id,
+      label: p.name,
+      sublabel: [
+        p.brand,
+        p.sku ? `SKU: ${p.sku}` : null,
+        p.productType === 'RAW_MATERIAL' ? 'Raw Material' : null
+      ].filter(Boolean).join(' • '),
+      searchKeywords: `${p.name} ${p.brand || ''} ${p.sku || ''} ${p.barcode || ''}`
+    }));
+  }, [products]);
+
   const handleItemChange = (id, field, value) => {
     setItems(items.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        // If product changes, reset variant
+        // If product changes, reset variant & auto-fill cost price if non-variant has one
         if (field === 'productId') {
           updatedItem.variantId = '';
+          const prod = products.find(p => p.id === value);
+          if (prod && prod.hasVariants === false && prod.costPrice && !item.costPrice) {
+            updatedItem.costPrice = String(prod.costPrice);
+          }
+        }
+        // If variant changes, auto-fill variant cost price if empty
+        if (field === 'variantId') {
+          const v = variants.find(v => v.id === value);
+          if (v && v.costPrice && !item.costPrice) {
+            updatedItem.costPrice = String(v.costPrice);
+          }
         }
         return updatedItem;
       }
@@ -76,6 +116,129 @@ export default function ReceiveStockForm() {
     if (items.length > 1) {
       setItems(items.filter(item => item.id !== id));
     }
+  };
+
+  // Quick Add Product Handlers
+  const handleOpenProductModal = (targetItemId = null, initialName = '') => {
+    setProductModalState({
+      isOpen: true,
+      targetItemId,
+      initialName
+    });
+  };
+
+  const handleCloseProductModal = () => {
+    setProductModalState({ isOpen: false, targetItemId: null, initialName: '' });
+  };
+
+  const handleProductCreated = ({ product, variant }) => {
+    // Add product to state immediately
+    setProducts(prev => {
+      const exists = prev.some(p => p.id === product.id);
+      return exists ? prev : [product, ...prev];
+    });
+
+    if (variant) {
+      setVariants(prev => {
+        const exists = prev.some(v => v.id === variant.id);
+        return exists ? prev : [variant, ...prev];
+      });
+    }
+
+    const targetId = productModalState.targetItemId;
+    const initialCost = (variant?.costPrice || product?.costPrice);
+
+    if (targetId) {
+      setItems(prev => prev.map(item => {
+        if (item.id === targetId) {
+          return {
+            ...item,
+            productId: product.id,
+            variantId: variant ? variant.id : '',
+            costPrice: initialCost ? String(initialCost) : item.costPrice
+          };
+        }
+        return item;
+      }));
+    } else {
+      // Triggered from header "+ New Product" button
+      setItems(prev => {
+        const lastItem = prev[prev.length - 1];
+        if (lastItem && !lastItem.productId) {
+          return prev.map((item, idx) => {
+            if (idx === prev.length - 1) {
+              return {
+                ...item,
+                productId: product.id,
+                variantId: variant ? variant.id : '',
+                costPrice: initialCost ? String(initialCost) : item.costPrice
+              };
+            }
+            return item;
+          });
+        } else {
+          return [
+            ...prev,
+            {
+              id: Date.now(),
+              productId: product.id,
+              variantId: variant ? variant.id : '',
+              quantity: '',
+              costPrice: initialCost ? String(initialCost) : '',
+              batchReference: ''
+            }
+          ];
+        }
+      });
+    }
+
+    // Quiet sync with backend
+    fetchInventoryData();
+  };
+
+  // Quick Add Variant Handlers
+  const handleOpenVariantModal = (targetItemId, productId) => {
+    const product = products.find(p => p.id === productId);
+    setVariantModalState({
+      isOpen: true,
+      targetItemId,
+      product
+    });
+  };
+
+  const handleCloseVariantModal = () => {
+    if (variantModalState.targetItemId) {
+      setItems(prev => prev.map(item => {
+        if (item.id === variantModalState.targetItemId && item.variantId === '__NEW_VARIANT__') {
+          return { ...item, variantId: '' };
+        }
+        return item;
+      }));
+    }
+    setVariantModalState({ isOpen: false, targetItemId: null, product: null });
+  };
+
+  const handleVariantCreated = (newVariant) => {
+    setVariants(prev => {
+      const exists = prev.some(v => v.id === newVariant.id);
+      return exists ? prev : [newVariant, ...prev];
+    });
+
+    const targetId = variantModalState.targetItemId;
+    if (targetId) {
+      setItems(prev => prev.map(item => {
+        if (item.id === targetId) {
+          return {
+            ...item,
+            variantId: newVariant.id,
+            costPrice: newVariant.costPrice ? String(newVariant.costPrice) : item.costPrice
+          };
+        }
+        return item;
+      }));
+    }
+
+    fetchInventoryData();
   };
 
   const handleSubmit = async (e) => {
@@ -195,11 +358,26 @@ export default function ReceiveStockForm() {
 
         {/* Items List */}
         <Card className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-surface-900">Received Items</h2>
-            <Button type="button" variant="outline" size="sm" onClick={addItem} icon={<Plus className="w-4 h-4" />}>
-              Add Item
-            </Button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-surface-900">Received Items</h2>
+              <p className="text-xs text-surface-500 mt-0.5">Select existing items or add new products on the fly</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={() => handleOpenProductModal(null)} 
+                icon={<PackagePlus className="w-4 h-4 text-primary-600" />}
+                className="border-primary-200 bg-primary-50/50 hover:bg-primary-100/70 text-primary-700"
+              >
+                New Product
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={addItem} icon={<Plus className="w-4 h-4" />}>
+                Add Item
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -208,8 +386,22 @@ export default function ReceiveStockForm() {
               const productVariants = variants.filter(v => v.productId === item.productId);
               const hasVariants = selectedProduct ? selectedProduct.hasVariants !== false : true;
               
+              const currentVariantOptions = productVariants.map(v => ({
+                value: v.id,
+                label: v.name + (v.size ? ` (${v.size})` : ''),
+                sublabel: [
+                  v.sku ? `SKU: ${v.sku}` : null,
+                  v.costPrice ? `Rs. ${v.costPrice}` : null
+                ].filter(Boolean).join(' • '),
+                searchKeywords: `${v.name} ${v.size || ''} ${v.sku || ''} ${v.barcode || ''}`
+              }));
+
               return (
-                <div key={item.id} className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative">
+                <div 
+                  key={item.id} 
+                  className="p-4 bg-surface-50 border border-surface-200 rounded-xl relative"
+                  style={{ zIndex: items.length - index + 10 }}
+                >
                   <div className="absolute -top-3 -left-3 w-6 h-6 bg-surface-900 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
                     {index + 1}
                   </div>
@@ -226,31 +418,55 @@ export default function ReceiveStockForm() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mr-8">
                     <div className="space-y-1">
-                      <label className="block text-xs font-medium text-surface-600">Product *</label>
-                      <select
-                        className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-medium text-surface-600">Product *</label>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenProductModal(item.id)}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-0.5 hover:underline"
+                          title="Create and select a new product"
+                        >
+                          <Plus className="w-3 h-3" /> New Product
+                        </button>
+                      </div>
+                      <SearchableSelect
                         value={item.productId}
-                        onChange={e => handleItemChange(item.id, 'productId', e.target.value)}
+                        onChange={val => handleItemChange(item.id, 'productId', val)}
+                        placeholder="Search or Select Product..."
+                        searchPlaceholder="Type name, brand, SKU to search..."
+                        options={productOptions}
+                        onAddNew={(searchText) => handleOpenProductModal(item.id, searchText)}
+                        addNewText="+ Add New Product..."
                         required
-                      >
-                        <option value="">Select Product...</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                      />
                     </div>
 
                     {hasVariants && (
                       <div className="space-y-1">
-                        <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
-                        <select
-                          className="w-full px-3 py-2 text-sm bg-white border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-medium text-surface-600">Variant/Size *</label>
+                          {item.productId && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenVariantModal(item.id, item.productId)}
+                              className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-0.5 hover:underline"
+                              title="Create a new variant for this product"
+                            >
+                              <Plus className="w-3 h-3" /> New Variant
+                            </button>
+                          )}
+                        </div>
+                        <SearchableSelect
                           value={item.variantId}
-                          onChange={e => handleItemChange(item.id, 'variantId', e.target.value)}
-                          required
+                          onChange={val => handleItemChange(item.id, 'variantId', val)}
+                          placeholder={item.productId ? "Search or Select Variant..." : "Select product first"}
+                          searchPlaceholder="Search variant, size..."
+                          options={currentVariantOptions}
                           disabled={!item.productId}
-                        >
-                          <option value="">Select Variant...</option>
-                          {productVariants.map(v => <option key={v.id} value={v.id}>{v.name} {v.size ? `(${v.size})` : ''}</option>)}
-                        </select>
+                          onAddNew={item.productId ? () => handleOpenVariantModal(item.id, item.productId) : null}
+                          addNewText="+ Add New Variant..."
+                          required
+                        />
                       </div>
                     )}
 
@@ -296,6 +512,22 @@ export default function ReceiveStockForm() {
           </Button>
         </div>
       </form>
+
+      {/* Quick Add Product Modal */}
+      <QuickAddProductModal
+        isOpen={productModalState.isOpen}
+        onClose={handleCloseProductModal}
+        onSuccess={handleProductCreated}
+        initialName={productModalState.initialName}
+      />
+
+      {/* Quick Add Variant Modal */}
+      <QuickAddVariantModal
+        isOpen={variantModalState.isOpen}
+        onClose={handleCloseVariantModal}
+        product={variantModalState.product}
+        onSuccess={handleVariantCreated}
+      />
     </div>
   );
 }
